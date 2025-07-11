@@ -19,17 +19,13 @@ app.use(bodyParser.json());
 
 // Database configuration
 const dbConfig = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  host: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
-  port: 5432,
+  connectionString: process.env.DATABASE_URL || 
+    "postgresql://chronic_admin:qYxBTV6xdzy0MV9oDMhBnfykQegl1nnT@dpg-d1ododqdbo4c73avbhr0-a.oregon-postgres.render.com/chronic_disease_db",
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false  // Required for Render PostgreSQL
   }
 };
 
-// JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 // Create the connection pool
@@ -60,9 +56,31 @@ async function initializeDatabase() {
     return pool;
   } catch (err) {
     console.error("Database initialization error:", err);
+    
+    // More detailed error logging
+    if (err.code === 'ENOTFOUND') {
+      console.error('DNS lookup failed - check your database hostname');
+    } else if (err.code === 'ECONNREFUSED') {
+      console.error('Connection refused - check if database is running and accessible');
+    } else if (err.code === '28P01') {
+      console.error('Authentication failed - check username/password');
+    }
+    
     throw err;
   }
 }
+
+// Initialize database connection
+let dbPool;
+initializeDatabase()
+  .then((pool) => {
+    dbPool = pool;
+    console.log("Database connection successfully established");
+  })
+  .catch((err) => {
+    console.error("Database connection failed:", err);
+    process.exit(1); // Exit with error code
+  });
 
 async function createTables() {
   try {
@@ -173,18 +191,6 @@ async function createTables() {
     throw err;
   }
 }
-
-// Initialize database connection
-let dbPool;
-initializeDatabase()
-  .then((pool) => {
-    dbPool = pool;
-    console.log("Database connection established");
-  })
-  .catch((err) => {
-    console.error("Database connection failed:", err);
-    process.exit(1);
-  });
 
 // Middleware to authenticate token
 function authenticateToken(req, res, next) {
