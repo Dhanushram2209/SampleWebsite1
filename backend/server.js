@@ -61,119 +61,111 @@ async function initializeDatabase() {
     // Check if tables exist and create them if not
     await pool.request().query(`
       IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
-      BEGIN
-        CREATE TABLE Users (
-          UserID INT PRIMARY KEY IDENTITY(1,1),
-          Email NVARCHAR(100) UNIQUE NOT NULL,
-          Password NVARCHAR(255) NOT NULL,
-          FirstName NVARCHAR(50) NOT NULL,
-          LastName NVARCHAR(50) NOT NULL,
-          Role NVARCHAR(20) NOT NULL CHECK (Role IN ('patient', 'doctor')),
-          CreatedAt DATETIME DEFAULT GETDATE(),
-          LastLogin DATETIME NULL
-        );
-        
-        CREATE TABLE PatientDetails (
-          PatientID INT PRIMARY KEY IDENTITY(1,1),
-          UserID INT FOREIGN KEY REFERENCES Users(UserID),
-          DateOfBirth DATE,
-          Gender NVARCHAR(10),
-          PhoneNumber NVARCHAR(20),
-          Address NVARCHAR(255),
-          EmergencyContact NVARCHAR(100),
-          EmergencyPhone NVARCHAR(20)
-        );
-        
-        CREATE TABLE DoctorDetails (
-          DoctorID INT PRIMARY KEY IDENTITY(1,1),
-          UserID INT FOREIGN KEY REFERENCES Users(UserID),
-          Specialization NVARCHAR(100),
-          LicenseNumber NVARCHAR(50),
-          PhoneNumber NVARCHAR(20),
-          HospitalAffiliation NVARCHAR(100)
-        );
+BEGIN
+  CREATE TABLE Users (
+    UserID INT PRIMARY KEY IDENTITY(1,1),
+    Email NVARCHAR(100) UNIQUE NOT NULL,
+    Password NVARCHAR(255) NOT NULL,
+    FirstName NVARCHAR(50) NOT NULL,
+    LastName NVARCHAR(50) NOT NULL,
+    Role NVARCHAR(20) NOT NULL CHECK (Role IN ('patient', 'doctor')),
+    CreatedAt DATETIME DEFAULT GETDATE(),
+    LastLogin DATETIME NULL
+  );
 
-        CREATE TABLE PatientHealthData (
-          RecordID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          BloodPressure NVARCHAR(20),
-          HeartRate INT,
-          BloodSugar INT,
-          OxygenLevel INT,
-          Notes NVARCHAR(500),
-          RecordedAt DATETIME DEFAULT GETDATE()
-        );
+  CREATE TABLE PatientDetails (
+    PatientID INT PRIMARY KEY IDENTITY(1,1),
+    UserID INT FOREIGN KEY REFERENCES Users(UserID),
+    DateOfBirth DATE,
+    Gender NVARCHAR(10),
+    PhoneNumber NVARCHAR(20),
+    Address NVARCHAR(255),
+    EmergencyContact NVARCHAR(100),
+    EmergencyPhone NVARCHAR(20)
+  );
 
-        CREATE TABLE PatientRiskScores (
-          ScoreID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          RiskScore INT,
-          CalculatedAt DATETIME DEFAULT GETDATE()
-        );
+  CREATE TABLE DoctorDetails (
+    DoctorID INT PRIMARY KEY IDENTITY(1,1),
+    UserID INT FOREIGN KEY REFERENCES Users(UserID),
+    Specialization NVARCHAR(100),
+    LicenseNumber NVARCHAR(50),
+    PhoneNumber NVARCHAR(20),
+    HospitalAffiliation NVARCHAR(100)
+  );
 
-        CREATE TABLE PatientAlerts (
-          AlertID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Message NVARCHAR(500),
-          Severity NVARCHAR(20) CHECK (Severity IN ('Low', 'Medium', 'High')),
-          Timestamp DATETIME DEFAULT GETDATE(),
-          IsRead BIT DEFAULT 0
-        );
+  CREATE TABLE PatientHealthData (
+    RecordID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    BloodPressure NVARCHAR(20),
+    HeartRate INT,
+    BloodSugar INT,
+    OxygenLevel INT,
+    Notes NVARCHAR(500),
+    RecordedAt DATETIME DEFAULT GETDATE()
+  );
 
-        CREATE TABLE PatientMedications (
-          MedicationID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Name NVARCHAR(100),
-          Dosage NVARCHAR(50),
-          Frequency NVARCHAR(50),
-          NextDose DATETIME,
-          Status NVARCHAR(20) DEFAULT 'Pending'
-        );
+  CREATE TABLE PatientRiskScores (
+    ScoreID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    RiskScore INT,
+    CalculatedAt DATETIME DEFAULT GETDATE()
+  );
 
-        CREATE TABLE PatientAppointments (
-          AppointmentID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
-          DateTime DATETIME,
-          Type NVARCHAR(50),
-          Status NVARCHAR(20) DEFAULT 'Scheduled',
-          Notes NVARCHAR(500)
-        );
+  CREATE TABLE PatientAlerts (
+    AlertID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    Message NVARCHAR(500),
+    Severity NVARCHAR(20) CHECK (Severity IN ('Low', 'Medium', 'High')),
+    Timestamp DATETIME DEFAULT GETDATE(),
+    IsRead BIT DEFAULT 0
+  );
 
-        CREATE TABLE TelemedicineRequests (
-          RequestID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
-          RequestedAt DATETIME DEFAULT GETDATE(),
-          PreferredDateTime DATETIME,
-          Reason NVARCHAR(500),
-          Symptoms NVARCHAR(500),
-          Status NVARCHAR(20) DEFAULT 'Pending'
-        );
+  -- ✅ Keep only this version of PatientMedications
+  CREATE TABLE PatientMedications (
+    MedicationID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    Name NVARCHAR(100) NOT NULL,
+    Dosage NVARCHAR(50) NOT NULL,
+    Frequency NVARCHAR(50) NOT NULL,
+    NextDose DATETIME NOT NULL,
+    Instructions NVARCHAR(500),
+    PrescribedBy NVARCHAR(100) NOT NULL,
+    Status NVARCHAR(20) DEFAULT 'Pending',
+    CreatedAt DATETIME DEFAULT GETDATE()
+  );
 
-        CREATE TABLE PatientPoints (
-          PointID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Points INT,
-          Reason NVARCHAR(200),
-          AwardedAt DATETIME DEFAULT GETDATE()
-        );
+  CREATE TABLE PatientAppointments (
+    AppointmentID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
+    DateTime DATETIME,
+    Type NVARCHAR(50),
+    Status NVARCHAR(20) DEFAULT 'Scheduled',
+    Notes NVARCHAR(500)
+  );
 
-        CREATE TABLE PatientMedications (
-  MedicationID INT PRIMARY KEY IDENTITY(1,1),
-  PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-  Name NVARCHAR(100) NOT NULL,
-  Dosage NVARCHAR(50) NOT NULL,
-  Frequency NVARCHAR(50) NOT NULL,
-  NextDose DATETIME NOT NULL,
-  Instructions NVARCHAR(500),
-  PrescribedBy NVARCHAR(100) NOT NULL,
-  Status NVARCHAR(20) DEFAULT 'Pending',
-  CreatedAt DATETIME DEFAULT GETDATE()
-);
-        
-        PRINT 'Tables created successfully';
-      END
+  CREATE TABLE TelemedicineRequests (
+    RequestID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
+    RequestedAt DATETIME DEFAULT GETDATE(),
+    PreferredDateTime DATETIME,
+    Reason NVARCHAR(500),
+    Symptoms NVARCHAR(500),
+    Status NVARCHAR(20) DEFAULT 'Pending'
+  );
+
+  CREATE TABLE PatientPoints (
+    PointID INT PRIMARY KEY IDENTITY(1,1),
+    PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
+    Points INT,
+    Reason NVARCHAR(200),
+    AwardedAt DATETIME DEFAULT GETDATE()
+  );
+
+  PRINT 'Tables created successfully';
+END
+
     `);
 
     console.log("Database tables verified");
@@ -1884,54 +1876,61 @@ app.post(
 );
 
 // Add Medication endpoint
-app.post('/api/patient/medications', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'patient') return res.sendStatus(403);
-  
+app.post("/api/patient/medications", authenticateToken, async (req, res) => {
+  if (req.user.role !== "patient") return res.sendStatus(403);
+
   try {
-    const { name, dosage, frequency, nextDose, instructions, prescribedBy } = req.body;
-    
-    const result = await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
+    const { name, dosage, frequency, nextDose, instructions, prescribedBy } =
+      req.body;
+
+    const result = await dbPool
+      .request()
+      .input(
+        "patientId",
+        sql.Int,
+        (
+          await dbPool
+            .request()
+            .input("userId", sql.Int, req.user.userId)
+            .query(
+              "SELECT PatientID FROM PatientDetails WHERE UserID = @userId"
+            )
         ).recordset[0].PatientID
       )
-      .input('name', sql.NVarChar, name)
-      .input('dosage', sql.NVarChar, dosage)
-      .input('frequency', sql.NVarChar, frequency)
-      .input('nextDose', sql.DateTime, nextDose)
-      .input('instructions', sql.NVarChar, instructions || null)
-      .input('prescribedBy', sql.NVarChar, prescribedBy)
-      .query(`
+      .input("name", sql.NVarChar, name)
+      .input("dosage", sql.NVarChar, dosage)
+      .input("frequency", sql.NVarChar, frequency)
+      .input("nextDose", sql.DateTime, nextDose)
+      .input("instructions", sql.NVarChar, instructions || null)
+      .input("prescribedBy", sql.NVarChar, prescribedBy).query(`
         INSERT INTO PatientMedications 
         (PatientID, Name, Dosage, Frequency, NextDose, Instructions, PrescribedBy, Status)
         VALUES (@patientId, @name, @dosage, @frequency, @nextDose, @instructions, @prescribedBy, 'Pending')
       `);
-    
-    res.status(201).json({ message: 'Medication added successfully' });
+
+    res.status(201).json({ message: "Medication added successfully" });
   } catch (error) {
-    console.error('Error adding medication:', error);
-    res.status(500).json({ message: 'Failed to add medication' });
+    console.error("Error adding medication:", error);
+    res.status(500).json({ message: "Failed to add medication" });
   }
 });
 
 // Get patient medications
-app.get('/api/patient/medications', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'patient') return res.sendStatus(403);
-  
+app.get("/api/patient/medications", authenticateToken, async (req, res) => {
+  if (req.user.role !== "patient") return res.sendStatus(403);
+
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
+    const result = await dbPool
+      .request()
+      .input("userId", sql.Int, req.user.userId).query(`
         SELECT * FROM PatientMedications 
         WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
         ORDER BY NextDose ASC
       `);
-    
+
     res.json(result.recordset);
   } catch (error) {
-    console.error('Error fetching medications:', error);
-    res.status(500).json({ message: 'Failed to fetch medications' });
+    console.error("Error fetching medications:", error);
+    res.status(500).json({ message: "Failed to fetch medications" });
   }
 });
