@@ -1,0 +1,81 @@
+.admin-dashboard {
+  min-height: 100vh;
+}
+
+/* Admin-specific styles */
+.user-table {
+  margin-top: 16px;
+}
+
+.user-table .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+}
+
+.user-table .ant-table-tbody > tr > td {
+  transition: all 0.3s;
+}
+
+.user-table .ant-table-tbody > tr:hover > td {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.system-status {
+  padding: 8px 0;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.activity-placeholder {
+  height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .dashboard-sider {
+    width: 80px !important;
+    min-width: 80px !important;
+  }
+  
+  .dashboard-title {
+    display: none;
+  }
+  
+  .dashboard-menu .ant-menu-item {
+    padding: 0 24px !important;
+    text-align: center;
+  }
+  
+  .dashboard-menu .ant-menu-item span {
+    display: none;
+  }
+  
+  .dashboard-header {
+    width: calc(100% - 80px);
+  }
+  
+  .dashboard-content {
+    margin-left: 80px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-sider {
+    display: none;
+  }
+  
+  .dashboard-header {
+    width: 100%;
+  }
+  
+  .dashboard-content {
+    margin-left: 0;
+  }
+}

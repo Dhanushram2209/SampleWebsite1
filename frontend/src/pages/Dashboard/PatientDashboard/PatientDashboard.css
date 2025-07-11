@@ -1,0 +1,399 @@
+/* PatientDashboard.css */
+
+/* Layout Styles */
+.patient-dashboard-layout {
+  min-height: 100vh;
+}
+
+.dashboard-sider {
+  background: #fff;
+  box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
+}
+
+.dashboard-content {
+  background: #f0f2f5;
+  padding: 24px;
+}
+
+/* Header Styles */
+.ant-layout-header {
+  background: #fff;
+  padding: 0 24px;
+  height: 64px;
+  line-height: 64px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+}
+
+/* Card Styles */
+.dashboard-section-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid #f0f0f0;
+}
+
+.dashboard-section-card .ant-card-head {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.dashboard-section-card .ant-card-head-title {
+  font-weight: 500;
+}
+
+.dashboard-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+/* Stats Cards */
+.dashboard-stats .ant-card {
+  transition: all 0.3s ease;
+}
+
+.dashboard-stats .ant-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Table Styles */
+.ant-table {
+  border-radius: 8px;
+}
+
+.ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 500;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #fafafa !important;
+}
+
+/* Menu Styles */
+.ant-menu {
+  border-right: none !important;
+}
+
+.ant-menu-item {
+  margin: 8px 0 !important;
+  border-radius: 4px;
+}
+
+.ant-menu-item-selected {
+  background-color: #e6f7ff !important;
+}
+
+/* Form Styles */
+.ant-form-item-label > label {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+/* Button Styles */
+.ant-btn-primary {
+  background: #1890ff;
+  border-color: #1890ff;
+}
+
+/* Alert Styles */
+.ant-alert {
+  border-radius: 8px;
+}
+
+/* Progress Bar Styles */
+.ant-progress-inner {
+  border-radius: 0;
+}
+
+/* Tag Styles */
+.ant-tag {
+  border-radius: 4px;
+}
+
+/* Responsive Grid */
+@media (max-width: 768px) {
+  .dashboard-stats .ant-col {
+    margin-bottom: 16px;
+  }
+  
+  .dashboard-sections .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+/* Custom Colors */
+.health-risk-high {
+  color: #ff4d4f;
+}
+
+.health-risk-medium {
+  color: #faad14;
+}
+
+.health-risk-low {
+  color: #52c41a;
+}
+
+/* Vitals Cards */
+.vital-card {
+  text-align: center;
+  border-radius: 8px;
+}
+
+.vital-card .ant-statistic-title {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.vital-card .ant-statistic-content {
+  font-size: 24px;
+}
+
+/* AI Assistant Modal */
+.ai-assistant-modal .ant-modal-body {
+  padding: 0;
+}
+
+.ai-assistant-modal .ant-card {
+  border: none;
+}
+
+/* Badge Styles */
+.ant-badge-count {
+  box-shadow: none;
+}
+
+/* Divider Styles */
+.ant-divider-horizontal {
+  margin: 16px 0;
+}
+
+/* Tabs Styles */
+.ant-tabs-tab {
+  font-weight: 500;
+}
+
+/* List Styles */
+.ant-list-item {
+  padding: 12px 16px;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Animation for alerts */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.critical-alert {
+  animation: pulse 2s infinite;
+}
+
+/* Custom classes for health status indicators */
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-good {
+  background-color: #52c41a;
+}
+
+.status-warning {
+  background-color: #faad14;
+}
+
+.status-critical {
+  background-color: #ff4d4f;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 576px) {
+  .dashboard-content {
+    padding: 12px;
+  }
+  
+  .ant-card-head {
+    padding: 0 12px;
+  }
+  
+  .ant-card-body {
+    padding: 12px;
+  }
+  
+  .vital-card .ant-statistic-content {
+    font-size: 20px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .patient-dashboard-layout {
+    background: #fff;
+  }
+  
+  .dashboard-sider, .ant-layout-header {
+    display: none;
+  }
+  
+  .dashboard-content {
+    padding: 0;
+    margin: 0;
+  }
+  
+  .ant-card {
+    border: none;
+    box-shadow: none;
+    page-break-inside: avoid;
+  }
+}
+/* AI Prediction Card Styles */
+.ai-prediction-card {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.ai-prediction-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.ai-prediction-card .ant-card-head {
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 0 20px;
+}
+
+.ai-prediction-card .ant-card-head-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+  padding: 16px 0;
+}
+
+.ai-prediction-card .ant-card-extra {
+  padding: 16px 0;
+}
+
+.ai-prediction-card .ant-card-body {
+  padding: 20px;
+}
+
+/* Chart Container */
+.ai-chart-container {
+  height: 250px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+/* Parameters Section */
+.simulation-params {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.simulation-params-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+  margin-bottom: 12px;
+}
+
+/* Form Items */
+.ai-form-item {
+  margin-bottom: 12px;
+}
+
+.ai-form-item .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+/* Buttons */
+.ai-action-button {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 0 16px;
+  height: 32px;
+}
+
+/* Loading State */
+.ai-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.ai-loading-text {
+  margin-top: 16px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* Empty State */
+.ai-empty-state {
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .ai-prediction-card .ant-card-extra {
+    padding-top: 8px;
+    float: none;
+    text-align: left;
+  }
+  
+  .simulation-params {
+    padding: 12px;
+  }
+  
+  .ai-form-item {
+    margin-bottom: 8px;
+  }
+}
+
+/* Dark Mode Support */
+[data-theme="dark"] .ai-prediction-card {
+  background: #141414;
+  border-color: #303030;
+}
+
+[data-theme="dark"] .ai-prediction-card .ant-card-head {
+  background: #1f1f1f;
+  border-color: #303030;
+}
+
+[data-theme="dark"] .simulation-params {
+  background: #1a1a1a;
+}
+
+[data-theme="dark"] .ai-prediction-card .ant-card-head-title {
+  color: rgba(255, 255, 255, 0.85);
+}

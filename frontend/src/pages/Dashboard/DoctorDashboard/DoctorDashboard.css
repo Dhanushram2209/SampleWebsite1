@@ -1,0 +1,85 @@
+.doctor-dashboard {
+  min-height: 100vh;
+}
+
+.dashboard-sections {
+  margin-top: 20px;
+}
+
+/* Doctor-specific styles */
+.patient-table {
+  margin-top: 16px;
+}
+
+.patient-table .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+}
+
+.patient-table .ant-table-tbody > tr > td {
+  transition: all 0.3s;
+}
+
+.patient-table .ant-table-tbody > tr:hover > td {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.last-checked {
+  display: flex;
+  align-items: center;
+  color: #666;
+}
+
+.alerts-placeholder {
+  height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .dashboard-sider {
+    width: 80px !important;
+    min-width: 80px !important;
+  }
+  
+  .dashboard-title {
+    display: none;
+  }
+  
+  .dashboard-menu .ant-menu-item {
+    padding: 0 24px !important;
+    text-align: center;
+  }
+  
+  .dashboard-menu .ant-menu-item span {
+    display: none;
+  }
+  
+  .dashboard-header {
+    width: calc(100% - 80px);
+  }
+  
+  .dashboard-content {
+    margin-left: 80px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-sider {
+    display: none;
+  }
+  
+  .dashboard-header {
+    width: 100%;
+  }
+  
+  .dashboard-content {
+    margin-left: 0;
+  }
+}
+
+.selected-row {
+  background-color: #f0f8ff;
+}
