@@ -14,13 +14,13 @@
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
+    "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mssql": "^11.0.1",
-    "openai": "^5.8.2",
+    "openai": "^5.9.0",
     "pg": "^8.16.3",
-    "twilio": "^5.7.1",
+    "twilio": "^5.7.3",
     "twilio-video": "^2.31.0"
   }
 }
