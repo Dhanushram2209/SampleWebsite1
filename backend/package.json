@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.2",
     "mssql": "^11.0.1",
     "openai": "^5.8.2",
+    "pg": "^8.16.3",
     "twilio": "^5.7.1",
     "twilio-video": "^2.31.0"
   }

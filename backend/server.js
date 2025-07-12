@@ -1,8 +1,8 @@
 require('dotenv').config();
+const { Pool } = require('pg');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const sql = require('mssql');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const twilio = require('twilio');
@@ -14,21 +14,22 @@ const twilioApiKey = process.env.TWILIO_API_KEY || '26716487a7705ba09b4ecb735e1f
 const twilioApiSecret = process.env.TWILIO_API_SECRET || 'MnkYCUA1ysNzrjJo9T6FidGvgDBhpeX8PKHwmRu5Lc3xOSQ7tWfEbl40VIa2Zq';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'https://chronic-disease-frontend.onrender.com'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(bodyParser.json());
 
-// Database configuration
-const dbConfig = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
-  options: {
-    encrypt: true, // For Azure
-    trustServerCertificate: true, // For local dev
-    enableArithAbort: true
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Required for Render's PostgreSQL
   }
-};
+});
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -36,127 +37,126 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 // Database initialization function
 async function initializeDatabase() {
   try {
-    const pool = await sql.connect(dbConfig);
-
-        // First check if Users table exists
-    const tableCheck = await pool.request()
-      .query("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Users'");
+    const client = await pool.connect();
     
-    console.log(`Users table exists: ${tableCheck.recordset.length > 0}`);
+    // Check if tables exist
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'users'
+      )
+    `);
     
-    if (tableCheck.recordset.length === 0) {
+    console.log(`Users table exists: ${tableCheck.rows[0].exists}`);
+    
+    if (!tableCheck.rows[0].exists) {
       console.log('Creating tables...');
-      // Rest of your table creation code
+      
+      await client.query(`
+        CREATE TABLE users (
+          user_id SERIAL PRIMARY KEY,
+          email VARCHAR(100) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          first_name VARCHAR(50) NOT NULL,
+          last_name VARCHAR(50) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('patient', 'doctor')),
+          created_at TIMESTAMP DEFAULT NOW(),
+          last_login TIMESTAMP NULL
+        );
+        
+        CREATE TABLE patient_details (
+          patient_id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(user_id),
+          date_of_birth DATE,
+          gender VARCHAR(10),
+          phone_number VARCHAR(20),
+          address VARCHAR(255),
+          emergency_contact VARCHAR(100),
+          emergency_phone VARCHAR(20)
+        );
+        
+        CREATE TABLE doctor_details (
+          doctor_id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(user_id),
+          specialization VARCHAR(100),
+          license_number VARCHAR(50),
+          phone_number VARCHAR(20),
+          hospital_affiliation VARCHAR(100)
+        );
+
+        CREATE TABLE patient_health_data (
+          record_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          blood_pressure VARCHAR(20),
+          heart_rate INTEGER,
+          blood_sugar INTEGER,
+          oxygen_level INTEGER,
+          notes VARCHAR(500),
+          recorded_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE TABLE patient_risk_scores (
+          score_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          risk_score INTEGER,
+          calculated_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE TABLE patient_alerts (
+          alert_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          message VARCHAR(500),
+          severity VARCHAR(20) CHECK (severity IN ('Low', 'Medium', 'High')),
+          timestamp TIMESTAMP DEFAULT NOW(),
+          is_read BOOLEAN DEFAULT FALSE
+        );
+
+        CREATE TABLE patient_medications (
+          medication_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          name VARCHAR(100),
+          dosage VARCHAR(50),
+          frequency VARCHAR(50),
+          next_dose TIMESTAMP,
+          status VARCHAR(20) DEFAULT 'Pending'
+        );
+
+        CREATE TABLE patient_appointments (
+          appointment_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          doctor_id INTEGER REFERENCES doctor_details(doctor_id),
+          date_time TIMESTAMP,
+          type VARCHAR(50),
+          status VARCHAR(20) DEFAULT 'Scheduled',
+          notes VARCHAR(500)
+        );
+
+        CREATE TABLE telemedicine_requests (
+          request_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          doctor_id INTEGER REFERENCES doctor_details(doctor_id),
+          requested_at TIMESTAMP DEFAULT NOW(),
+          preferred_date_time TIMESTAMP,
+          reason VARCHAR(500),
+          symptoms VARCHAR(500),
+          status VARCHAR(20) DEFAULT 'Pending'
+        );
+
+        CREATE TABLE patient_points (
+          point_id SERIAL PRIMARY KEY,
+          patient_id INTEGER REFERENCES patient_details(patient_id),
+          points INTEGER,
+          reason VARCHAR(200),
+          awarded_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      
+      console.log('Tables created successfully');
     } else {
       console.log('Tables already exist, skipping creation');
     }
     
-    // Check if tables exist and create them if not
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
-      BEGIN
-        CREATE TABLE Users (
-          UserID INT PRIMARY KEY IDENTITY(1,1),
-          Email NVARCHAR(100) UNIQUE NOT NULL,
-          Password NVARCHAR(255) NOT NULL,
-          FirstName NVARCHAR(50) NOT NULL,
-          LastName NVARCHAR(50) NOT NULL,
-          Role NVARCHAR(20) NOT NULL CHECK (Role IN ('patient', 'doctor')),
-          CreatedAt DATETIME DEFAULT GETDATE(),
-          LastLogin DATETIME NULL
-        );
-        
-        CREATE TABLE PatientDetails (
-          PatientID INT PRIMARY KEY IDENTITY(1,1),
-          UserID INT FOREIGN KEY REFERENCES Users(UserID),
-          DateOfBirth DATE,
-          Gender NVARCHAR(10),
-          PhoneNumber NVARCHAR(20),
-          Address NVARCHAR(255),
-          EmergencyContact NVARCHAR(100),
-          EmergencyPhone NVARCHAR(20)
-        );
-        
-        CREATE TABLE DoctorDetails (
-          DoctorID INT PRIMARY KEY IDENTITY(1,1),
-          UserID INT FOREIGN KEY REFERENCES Users(UserID),
-          Specialization NVARCHAR(100),
-          LicenseNumber NVARCHAR(50),
-          PhoneNumber NVARCHAR(20),
-          HospitalAffiliation NVARCHAR(100)
-        );
-
-        CREATE TABLE PatientHealthData (
-          RecordID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          BloodPressure NVARCHAR(20),
-          HeartRate INT,
-          BloodSugar INT,
-          OxygenLevel INT,
-          Notes NVARCHAR(500),
-          RecordedAt DATETIME DEFAULT GETDATE()
-        );
-
-        CREATE TABLE PatientRiskScores (
-          ScoreID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          RiskScore INT,
-          CalculatedAt DATETIME DEFAULT GETDATE()
-        );
-
-        CREATE TABLE PatientAlerts (
-          AlertID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Message NVARCHAR(500),
-          Severity NVARCHAR(20) CHECK (Severity IN ('Low', 'Medium', 'High')),
-          Timestamp DATETIME DEFAULT GETDATE(),
-          IsRead BIT DEFAULT 0
-        );
-
-        CREATE TABLE PatientMedications (
-          MedicationID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Name NVARCHAR(100),
-          Dosage NVARCHAR(50),
-          Frequency NVARCHAR(50),
-          NextDose DATETIME,
-          Status NVARCHAR(20) DEFAULT 'Pending'
-        );
-
-        CREATE TABLE PatientAppointments (
-          AppointmentID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
-          DateTime DATETIME,
-          Type NVARCHAR(50),
-          Status NVARCHAR(20) DEFAULT 'Scheduled',
-          Notes NVARCHAR(500)
-        );
-
-        CREATE TABLE TelemedicineRequests (
-          RequestID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          DoctorID INT FOREIGN KEY REFERENCES DoctorDetails(DoctorID),
-          RequestedAt DATETIME DEFAULT GETDATE(),
-          PreferredDateTime DATETIME,
-          Reason NVARCHAR(500),
-          Symptoms NVARCHAR(500),
-          Status NVARCHAR(20) DEFAULT 'Pending'
-        );
-
-        CREATE TABLE PatientPoints (
-          PointID INT PRIMARY KEY IDENTITY(1,1),
-          PatientID INT FOREIGN KEY REFERENCES PatientDetails(PatientID),
-          Points INT,
-          Reason NVARCHAR(200),
-          AwardedAt DATETIME DEFAULT GETDATE()
-        );
-        
-        PRINT 'Tables created successfully';
-      END
-    `);
-    
-    console.log('Database tables verified');
+    client.release();
     return pool;
   } catch (err) {
     console.error('Database initialization error:', err);
@@ -165,10 +165,8 @@ async function initializeDatabase() {
 }
 
 // Initialize database connection
-let dbPool;
 initializeDatabase()
-  .then(pool => {
-    dbPool = pool;
+  .then(() => {
     console.log('Database connection established');
   })
   .catch(err => {
@@ -195,13 +193,13 @@ app.post('/api/register', async (req, res) => {
   const { email, password, firstName, lastName, role, ...details } = req.body;
 
   try {
-
     // Check if user already exists
-    const userCheck = await dbPool.request()
-      .input('email', sql.NVarChar, email)
-      .query('SELECT * FROM Users WHERE Email = @email');
+    const userCheck = await pool.query(
+      'SELECT * FROM users WHERE email = $1', 
+      [email]
+    );
 
-    if (userCheck.recordset.length > 0) {
+    if (userCheck.rows.length > 0) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
@@ -209,35 +207,31 @@ app.post('/api/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
-    const result = await dbPool.request()
-      .input('email', sql.NVarChar, email)
-      .input('password', sql.NVarChar, hashedPassword)
-      .input('firstName', sql.NVarChar, firstName)
-      .input('lastName', sql.NVarChar, lastName)
-      .input('role', sql.NVarChar, role)
-      .query('INSERT INTO Users (Email, Password, FirstName, LastName, Role) OUTPUT INSERTED.UserID VALUES (@email, @password, @firstName, @lastName, @role)');
+    const result = await pool.query(
+      `INSERT INTO users (email, password, first_name, last_name, role) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING user_id`,
+      [email, hashedPassword, firstName, lastName, role]
+    );
 
-    const userId = result.recordset[0].UserID;
+    const userId = result.rows[0].user_id;
 
     // Insert role-specific details
     if (role === 'patient') {
-      await dbPool.request()
-        .input('userId', sql.Int, userId)
-        .input('dateOfBirth', sql.Date, details.dateOfBirth)
-        .input('gender', sql.NVarChar, details.gender)
-        .input('phoneNumber', sql.NVarChar, details.phoneNumber)
-        .input('address', sql.NVarChar, details.address)
-        .input('emergencyContact', sql.NVarChar, details.emergencyContact)
-        .input('emergencyPhone', sql.NVarChar, details.emergencyPhone)
-        .query('INSERT INTO PatientDetails (UserID, DateOfBirth, Gender, PhoneNumber, Address, EmergencyContact, EmergencyPhone) VALUES (@userId, @dateOfBirth, @gender, @phoneNumber, @address, @emergencyContact, @emergencyPhone)');
+      await pool.query(
+        `INSERT INTO patient_details 
+         (user_id, date_of_birth, gender, phone_number, address, emergency_contact, emergency_phone) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [userId, details.dateOfBirth, details.gender, details.phoneNumber, 
+         details.address, details.emergencyContact, details.emergencyPhone]
+      );
     } else if (role === 'doctor') {
-      await dbPool.request()
-        .input('userId', sql.Int, userId)
-        .input('specialization', sql.NVarChar, details.specialization)
-        .input('licenseNumber', sql.NVarChar, details.licenseNumber)
-        .input('phoneNumber', sql.NVarChar, details.phoneNumber)
-        .input('hospitalAffiliation', sql.NVarChar, details.hospitalAffiliation)
-        .query('INSERT INTO DoctorDetails (UserID, Specialization, LicenseNumber, PhoneNumber, HospitalAffiliation) VALUES (@userId, @specialization, @licenseNumber, @phoneNumber, @hospitalAffiliation)');
+      await pool.query(
+        `INSERT INTO doctor_details 
+         (user_id, specialization, license_number, phone_number, hospital_affiliation) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId, details.specialization, details.licenseNumber, 
+         details.phoneNumber, details.hospitalAffiliation]
+      );
     }
 
     res.status(201).json({ message: 'User registered successfully' });
@@ -252,29 +246,31 @@ app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const result = await dbPool.request()
-      .input('email', sql.NVarChar, email)
-      .query('SELECT * FROM Users WHERE Email = @email');
+    const result = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      [email]
+    );
 
-    if (result.recordset.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const user = result.recordset[0];
-    const isMatch = await bcrypt.compare(password, user.Password);
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Update last login
-    await dbPool.request()
-      .input('userId', sql.Int, user.UserID)
-      .query('UPDATE Users SET LastLogin = GETDATE() WHERE UserID = @userId');
+    await pool.query(
+      'UPDATE users SET last_login = NOW() WHERE user_id = $1',
+      [user.user_id]
+    );
 
     // Create token
     const token = jwt.sign(
-      { userId: user.UserID, email: user.Email, role: user.Role },
+      { userId: user.user_id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -282,10 +278,10 @@ app.post('/api/login', async (req, res) => {
     res.json({ 
       token, 
       user: { 
-        email: user.Email, 
-        firstName: user.FirstName, 
-        lastName: user.LastName, 
-        role: user.Role 
+        email: user.email, 
+        firstName: user.first_name, 
+        lastName: user.last_name, 
+        role: user.role 
       } 
     });
   } catch (error) {
@@ -299,15 +295,16 @@ app.get('/api/patient/health-data', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT * FROM PatientHealthData 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY RecordedAt DESC
-      `);
+    const result = await pool.query(
+      `SELECT * FROM patient_health_data 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY recorded_at DESC`,
+      [req.user.userId]
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching health data:', error);
     res.status(500).json({ message: 'Failed to fetch health data' });
@@ -320,23 +317,17 @@ app.post('/api/patient/health-data', authenticateToken, async (req, res) => {
   try {
     const { bloodPressure, heartRate, bloodSugar, oxygenLevel, notes } = req.body;
     
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('bloodPressure', sql.NVarChar, bloodPressure)
-      .input('heartRate', sql.Int, heartRate)
-      .input('bloodSugar', sql.Int, bloodSugar)
-      .input('oxygenLevel', sql.Int, oxygenLevel)
-      .input('notes', sql.NVarChar, notes || null)
-      .query(`
-        INSERT INTO PatientHealthData 
-        (PatientID, BloodPressure, HeartRate, BloodSugar, OxygenLevel, Notes, RecordedAt)
-        VALUES (@patientId, @bloodPressure, @heartRate, @bloodSugar, @oxygenLevel, @notes, GETDATE())
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `INSERT INTO patient_health_data 
+       (patient_id, blood_pressure, heart_rate, blood_sugar, oxygen_level, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [patientId, bloodPressure, heartRate, bloodSugar, oxygenLevel, notes || null]
+    );
     
     // Trigger AI analysis
     await analyzePatientData(req.user.userId);
@@ -352,15 +343,17 @@ app.get('/api/patient/risk-score', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT TOP 1 RiskScore FROM PatientRiskScores 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY CalculatedAt DESC
-      `);
+    const result = await pool.query(
+      `SELECT risk_score FROM patient_risk_scores 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY calculated_at DESC
+       LIMIT 1`,
+      [req.user.userId]
+    );
     
-    res.json({ score: result.recordset.length > 0 ? result.recordset[0].RiskScore : 0 });
+    res.json({ score: result.rows.length > 0 ? result.rows[0].risk_score : 0 });
   } catch (error) {
     console.error('Error fetching risk score:', error);
     res.status(500).json({ message: 'Failed to fetch risk score' });
@@ -372,21 +365,23 @@ app.get('/api/patient/vitals', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT TOP 1 
-          BloodPressure as bloodPressure,
-          HeartRate as heartRate,
-          BloodSugar as bloodSugar,
-          OxygenLevel as oxygenLevel
-        FROM PatientHealthData 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY RecordedAt DESC
-      `);
+    const result = await pool.query(
+      `SELECT 
+        blood_pressure as "bloodPressure",
+        heart_rate as "heartRate",
+        blood_sugar as "bloodSugar",
+        oxygen_level as "oxygenLevel"
+       FROM patient_health_data 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY recorded_at DESC
+       LIMIT 1`,
+      [req.user.userId]
+    );
     
-    if (result.recordset.length > 0) {
-      res.json(result.recordset[0]);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
     } else {
       res.json(null);
     }
@@ -400,53 +395,53 @@ app.get('/api/patient/vitals', authenticateToken, async (req, res) => {
 async function analyzePatientData(userId) {
   try {
     // Get patient's recent health data
-    const healthData = await dbPool.request()
-      .input('userId', sql.Int, userId)
-      .query(`
-        SELECT TOP 10 * FROM PatientHealthData 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY RecordedAt DESC
-      `);
+    const healthData = await pool.query(
+      `SELECT * FROM patient_health_data 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY recorded_at DESC
+       LIMIT 10`,
+      [userId]
+    );
     
-    if (healthData.recordset.length === 0) return;
+    if (healthData.rows.length === 0) return;
     
-    // Simple risk calculation (replace with actual ML model in production)
-    const latestData = healthData.recordset[0];
+    // Simple risk calculation
+    const latestData = healthData.rows[0];
     let riskScore = 0;
     
     // Blood pressure risk
-    const [systolic, diastolic] = latestData.BloodPressure.split('/').map(Number);
+    const [systolic, diastolic] = latestData.blood_pressure.split('/').map(Number);
     if (systolic > 140 || diastolic > 90) riskScore += 30;
     else if (systolic > 130 || diastolic > 85) riskScore += 15;
     
     // Heart rate risk
-    if (latestData.HeartRate > 100 || latestData.HeartRate < 60) riskScore += 20;
-    else if (latestData.HeartRate > 90 || latestData.HeartRate < 65) riskScore += 10;
+    if (latestData.heart_rate > 100 || latestData.heart_rate < 60) riskScore += 20;
+    else if (latestData.heart_rate > 90 || latestData.heart_rate < 65) riskScore += 10;
     
     // Blood sugar risk
-    if (latestData.BloodSugar > 140) riskScore += 25;
-    else if (latestData.BloodSugar > 120) riskScore += 12;
+    if (latestData.blood_sugar > 140) riskScore += 25;
+    else if (latestData.blood_sugar > 120) riskScore += 12;
     
     // Oxygen level risk
-    if (latestData.OxygenLevel < 92) riskScore += 25;
-    else if (latestData.OxygenLevel < 95) riskScore += 10;
+    if (latestData.oxygen_level < 92) riskScore += 25;
+    else if (latestData.oxygen_level < 95) riskScore += 10;
     
     // Cap at 100
     riskScore = Math.min(100, riskScore);
     
     // Save risk score
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('riskScore', sql.Int, riskScore)
-      .query(`
-        INSERT INTO PatientRiskScores (PatientID, RiskScore, CalculatedAt)
-        VALUES (@patientId, @riskScore, GETDATE())
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `INSERT INTO patient_risk_scores (patient_id, risk_score) 
+       VALUES ($1, $2)`,
+      [patientId, riskScore]
+    );
     
     // Generate alerts if needed
     if (riskScore > 70) {
@@ -462,19 +457,16 @@ async function analyzePatientData(userId) {
 
 async function generateAlert(userId, message, severity) {
   try {
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('message', sql.NVarChar, message)
-      .input('severity', sql.NVarChar, severity)
-      .query(`
-        INSERT INTO PatientAlerts (PatientID, Message, Severity, Timestamp, IsRead)
-        VALUES (@patientId, @message, @severity, GETDATE(), 0)
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `INSERT INTO patient_alerts (patient_id, message, severity) 
+       VALUES ($1, $2, $3)`,
+      [patientId, message, severity]
+    );
   } catch (error) {
     console.error('Error generating alert:', error);
   }
@@ -486,8 +478,14 @@ app.get('/api/protected', authenticateToken, (req, res) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', database: dbPool ? 'Connected' : 'Disconnected' });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Simple query to verify DB connection
+    await pool.query('SELECT 1');
+    res.json({ status: 'OK', database: 'Connected' });
+  } catch (err) {
+    res.json({ status: 'OK', database: 'Disconnected' });
+  }
 });
 
 // Error handling middleware
@@ -503,12 +501,11 @@ app.listen(PORT, () => {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  if (dbPool) {
-    await dbPool.close();
-    console.log('Database connection closed');
-  }
+  await pool.end();
+  console.log('Database connection closed');
   process.exit(0);
 });
+
 // Add these endpoints to your server.js file
 
 // Get patient medications
@@ -516,15 +513,16 @@ app.get('/api/patient/medications', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT * FROM PatientMedications 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY NextDose ASC
-      `);
+    const result = await pool.query(
+      `SELECT * FROM patient_medications 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY next_dose ASC`,
+      [req.user.userId]
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching medications:', error);
     res.status(500).json({ message: 'Failed to fetch medications' });
@@ -536,15 +534,16 @@ app.get('/api/patient/alerts', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT * FROM PatientAlerts 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY Timestamp DESC
-      `);
+    const result = await pool.query(
+      `SELECT * FROM patient_alerts 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY timestamp DESC`,
+      [req.user.userId]
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching alerts:', error);
     res.status(500).json({ message: 'Failed to fetch alerts' });
@@ -579,14 +578,15 @@ app.get('/api/patient/points', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT SUM(Points) as points FROM PatientPoints
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-      `);
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(points), 0) as points FROM patient_points
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )`,
+      [req.user.userId]
+    );
     
-    res.json({ points: result.recordset[0].points || 0 });
+    res.json({ points: result.rows[0].points });
   } catch (error) {
     console.error('Error fetching points:', error);
     res.status(500).json({ message: 'Failed to fetch points' });
@@ -596,20 +596,19 @@ app.get('/api/patient/points', authenticateToken, async (req, res) => {
 // Get all doctors
 app.get('/api/doctors', authenticateToken, async (req, res) => {
   try {
-    const result = await dbPool.request()
-      .query(`
-        SELECT 
-          dd.DoctorID as id, 
-          u.FirstName + ' ' + u.LastName as name, 
-          dd.Specialization as specialization,
-          dd.HospitalAffiliation as hospital,
-          dd.PhoneNumber as phone,
-          u.Email as email
-        FROM DoctorDetails dd
-        JOIN Users u ON dd.UserID = u.UserID
-      `);
+    const result = await pool.query(
+      `SELECT 
+        dd.doctor_id as id, 
+        u.first_name || ' ' || u.last_name as name, 
+        dd.specialization,
+        dd.hospital_affiliation as hospital,
+        dd.phone_number as phone,
+        u.email
+       FROM doctor_details dd
+       JOIN users u ON dd.user_id = u.user_id`
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching doctors:', error);
     res.status(500).json({ message: 'Failed to fetch doctors' });
@@ -623,38 +622,24 @@ app.post('/api/telemedicine/request', authenticateToken, async (req, res) => {
   try {
     const { doctorId, preferredDateTime, reason, symptoms } = req.body;
     
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('doctorId', sql.Int, doctorId)
-      .input('preferredDateTime', sql.DateTime, preferredDateTime)
-      .input('reason', sql.NVarChar, reason)
-      .input('symptoms', sql.NVarChar, symptoms || null)
-      .query(`
-        INSERT INTO TelemedicineRequests 
-        (PatientID, DoctorID, PreferredDateTime, Reason, Symptoms)
-        VALUES (@patientId, @doctorId, @preferredDateTime, @reason, @symptoms)
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `INSERT INTO telemedicine_requests 
+       (patient_id, doctor_id, preferred_date_time, reason, symptoms) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [patientId, doctorId, preferredDateTime, reason, symptoms || null]
+    );
     
-    // Award points for engagement
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('points', sql.Int, 10)
-      .input('reason', sql.NVarChar, 'Telemedicine request submission')
-      .query(`
-        INSERT INTO PatientPoints 
-        (PatientID, Points, Reason)
-        VALUES (@patientId, @points, @reason)
-      `);
+    await pool.query(
+      `INSERT INTO patient_points 
+       (patient_id, points, reason) 
+       VALUES ($1, $2, $3)`,
+      [patientId, 10, 'Telemedicine request submission']
+    );
     
     res.status(201).json({ message: 'Telemedicine request submitted successfully' });
   } catch (error) {
@@ -668,35 +653,24 @@ app.post('/api/patient/medications/:id/taken', authenticateToken, async (req, re
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    await dbPool.request()
-      .input('medicationId', sql.Int, req.params.id)
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .query(`
-        UPDATE PatientMedications 
-        SET Status = 'Taken' 
-        WHERE MedicationID = @medicationId AND PatientID = @patientId
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `UPDATE patient_medications 
+       SET status = 'Taken' 
+       WHERE medication_id = $1 AND patient_id = $2`,
+      [req.params.id, patientId]
+    );
     
-    // Award points for medication adherence
-    await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('points', sql.Int, 5)
-      .input('reason', sql.NVarChar, 'Medication adherence')
-      .query(`
-        INSERT INTO PatientPoints 
-        (PatientID, Points, Reason)
-        VALUES (@patientId, @points, @reason)
-      `);
+    await pool.query(
+      `INSERT INTO patient_points 
+       (patient_id, points, reason) 
+       VALUES ($1, $2, $3)`,
+      [patientId, 5, 'Medication adherence']
+    );
     
     res.json({ message: 'Medication marked as taken' });
   } catch (error) {
@@ -710,19 +684,17 @@ app.post('/api/patient/alerts/:id/read', authenticateToken, async (req, res) => 
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    await dbPool.request()
-      .input('alertId', sql.Int, req.params.id)
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .query(`
-        UPDATE PatientAlerts 
-        SET IsRead = 1 
-        WHERE AlertID = @alertId AND PatientID = @patientId
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `UPDATE patient_alerts 
+       SET is_read = TRUE 
+       WHERE alert_id = $1 AND patient_id = $2`,
+      [req.params.id, patientId]
+    );
     
     res.json({ message: 'Alert marked as read' });
   } catch (error) {
@@ -737,38 +709,29 @@ app.get('/api/patient/profile', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    // Get basic user info
-    const userResult = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query('SELECT FirstName, LastName, Email, Role FROM Users WHERE UserID = @userId');
+    const userResult = await pool.query(
+      'SELECT first_name, last_name, email, role FROM users WHERE user_id = $1',
+      [req.user.userId]
+    );
     
-    if (userResult.recordset.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    const user = userResult.recordset[0];
+    const user = userResult.rows[0];
+    const patientResult = await pool.query(
+      `SELECT date_of_birth, gender, phone_number, address, emergency_contact, emergency_phone 
+       FROM patient_details 
+       WHERE user_id = $1`,
+      [req.user.userId]
+    );
     
-    // Get patient details
-    const patientResult = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT DateOfBirth, Gender, PhoneNumber, Address, EmergencyContact, EmergencyPhone 
-        FROM PatientDetails 
-        WHERE UserID = @userId
-      `);
-    
-    // Combine the data
     const profileData = {
-      firstName: user.FirstName,
-      lastName: user.LastName,
-      email: user.Email,
-      role: user.Role,
-      dateOfBirth: patientResult.recordset[0]?.DateOfBirth,
-      gender: patientResult.recordset[0]?.Gender,
-      phoneNumber: patientResult.recordset[0]?.PhoneNumber,
-      address: patientResult.recordset[0]?.Address,
-      emergencyContact: patientResult.recordset[0]?.EmergencyContact,
-      emergencyPhone: patientResult.recordset[0]?.EmergencyPhone
+      firstName: user.first_name,
+      lastName: user.last_name,
+      email: user.email,
+      role: user.role,
+      ...patientResult.rows[0]
     };
     
     res.json(profileData);
@@ -783,36 +746,29 @@ app.get('/api/doctor/profile', authenticateToken, async (req, res) => {
   if (req.user.role !== 'doctor') return res.sendStatus(403);
   
   try {
-    // Get basic user info
-    const userResult = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query('SELECT FirstName, LastName, Email, Role FROM Users WHERE UserID = @userId');
+    const userResult = await pool.query(
+      'SELECT first_name, last_name, email, role FROM users WHERE user_id = $1',
+      [req.user.userId]
+    );
     
-    if (userResult.recordset.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    const user = userResult.recordset[0];
+    const user = userResult.rows[0];
+    const doctorResult = await pool.query(
+      `SELECT specialization, license_number, phone_number, hospital_affiliation 
+       FROM doctor_details 
+       WHERE user_id = $1`,
+      [req.user.userId]
+    );
     
-    // Get doctor details
-    const doctorResult = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT Specialization, LicenseNumber, PhoneNumber, HospitalAffiliation 
-        FROM DoctorDetails 
-        WHERE UserID = @userId
-      `);
-    
-    // Combine the data
     const profileData = {
-      firstName: user.FirstName,
-      lastName: user.LastName,
-      email: user.Email,
-      role: user.Role,
-      specialization: doctorResult.recordset[0]?.Specialization,
-      licenseNumber: doctorResult.recordset[0]?.LicenseNumber,
-      phoneNumber: doctorResult.recordset[0]?.PhoneNumber,
-      hospitalAffiliation: doctorResult.recordset[0]?.HospitalAffiliation
+      firstName: user.first_name,
+      lastName: user.last_name,
+      email: user.email,
+      role: user.role,
+      ...doctorResult.rows[0]
     };
     
     res.json(profileData);
@@ -826,13 +782,26 @@ app.get('/api/doctor/profile', authenticateToken, async (req, res) => {
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     if (req.user.role === 'patient') {
-      // Forward to patient profile endpoint
-      req.url = '/api/patient/profile';
-      return app.handle(req, res);
+      const result = await pool.query(
+        `SELECT u.first_name, u.last_name, u.email, u.role,
+                pd.date_of_birth, pd.gender, pd.phone_number, pd.address,
+                pd.emergency_contact, pd.emergency_phone
+         FROM users u
+         JOIN patient_details pd ON u.user_id = pd.user_id
+         WHERE u.user_id = $1`,
+        [req.user.userId]
+      );
+      res.json(result.rows[0]);
     } else if (req.user.role === 'doctor') {
-      // Forward to doctor profile endpoint
-      req.url = '/api/doctor/profile';
-      return app.handle(req, res);
+      const result = await pool.query(
+        `SELECT u.first_name, u.last_name, u.email, u.role,
+                dd.specialization, dd.license_number, dd.phone_number, dd.hospital_affiliation
+         FROM users u
+         JOIN doctor_details dd ON u.user_id = dd.user_id
+         WHERE u.user_id = $1`,
+        [req.user.userId]
+      );
+      res.json(result.rows[0]);
     } else {
       return res.status(403).json({ message: 'Unknown role' });
     }
@@ -847,29 +816,27 @@ app.get('/api/doctor/patients', authenticateToken, async (req, res) => {
   if (req.user.role !== 'doctor') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request().query(`
-      SELECT 
-        p.PatientID as id,
-        u.FirstName + ' ' + u.LastName as name,
-        pd.DateOfBirth as dob,
-        pd.Gender as gender,
-        pd.PhoneNumber as phone,
-        u.Email as email,
-        (SELECT TOP 1 RiskScore FROM PatientRiskScores 
-         WHERE PatientID = p.PatientID 
-         ORDER BY CalculatedAt DESC) as riskScore,
-        (SELECT COUNT(*) FROM PatientAlerts 
-         WHERE PatientID = p.PatientID AND IsRead = 0) as unreadAlerts,
-        (SELECT COUNT(*) FROM PatientMedications 
-         WHERE PatientID = p.PatientID AND Status = 'Pending') as pendingMeds
-      FROM PatientDetails p
-      JOIN Users u ON p.UserID = u.UserID
-      LEFT JOIN PatientDetails pd ON p.PatientID = pd.PatientID
-      ORDER BY u.LastName, u.FirstName
-    `);
+    const result = await pool.query(
+      `SELECT 
+        p.patient_id as id,
+        u.first_name || ' ' || u.last_name as name,
+        pd.date_of_birth as dob,
+        pd.gender,
+        pd.phone_number as phone,
+        u.email,
+        (SELECT risk_score FROM patient_risk_scores 
+         WHERE patient_id = p.patient_id 
+         ORDER BY calculated_at DESC LIMIT 1) as "riskScore",
+        (SELECT COUNT(*) FROM patient_alerts 
+         WHERE patient_id = p.patient_id AND is_read = FALSE) as "unreadAlerts",
+        (SELECT COUNT(*) FROM patient_medications 
+         WHERE patient_id = p.patient_id AND status = 'Pending') as "pendingMeds"
+       FROM patient_details p
+       JOIN users u ON p.user_id = u.user_id
+       ORDER BY u.last_name, u.first_name`
+    );
 
-    // Process the data to add status information
-    const patients = result.recordset.map(patient => {
+    const patients = result.rows.map(patient => {
       let status = 'Normal';
       if (patient.riskScore > 70) status = 'Critical';
       else if (patient.riskScore > 40) status = 'Warning';
@@ -878,7 +845,6 @@ app.get('/api/doctor/patients', authenticateToken, async (req, res) => {
         ...patient,
         status,
         lastReading: patient.riskScore ? `Risk: ${patient.riskScore}` : 'No data',
-        lastChecked: 'Today', // You can modify this to show actual last check date
         pendingActions: patient.pendingMeds + patient.unreadAlerts
       };
     });
@@ -897,67 +863,53 @@ app.get('/api/doctor/patient/:id', authenticateToken, async (req, res) => {
   
   try {
     const patientId = req.params.id;
+    const patientResult = await pool.query(
+      `SELECT 
+        u.first_name, u.last_name, u.email,
+        pd.date_of_birth, pd.gender, pd.phone_number, 
+        pd.address, pd.emergency_contact, pd.emergency_phone
+       FROM patient_details pd
+       JOIN users u ON pd.user_id = u.user_id
+       WHERE pd.patient_id = $1`,
+      [patientId]
+    );
     
-    // Get basic patient info
-    const patientResult = await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .query(`
-        SELECT 
-          u.FirstName, u.LastName, u.Email,
-          pd.DateOfBirth, pd.Gender, pd.PhoneNumber, 
-          pd.Address, pd.EmergencyContact, pd.EmergencyPhone
-        FROM PatientDetails pd
-        JOIN Users u ON pd.UserID = u.UserID
-        WHERE pd.PatientID = @patientId
-      `);
-    
-    if (patientResult.recordset.length === 0) {
+    if (patientResult.rows.length === 0) {
       return res.status(404).json({ message: 'Patient not found' });
     }
     
-    const patient = patientResult.recordset[0];
-    
-    // Get health data
-    const healthData = await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .query(`
-        SELECT TOP 10 * FROM PatientHealthData
-        WHERE PatientID = @patientId
-        ORDER BY RecordedAt DESC
-      `);
-    
-    // Get medications
-    const medications = await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .query(`
-        SELECT * FROM PatientMedications
-        WHERE PatientID = @patientId
-        ORDER BY NextDose ASC
-      `);
-    
-    // Get risk scores
-    const riskScores = await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .query(`
-        SELECT TOP 5 * FROM PatientRiskScores
-        WHERE PatientID = @patientId
-        ORDER BY CalculatedAt DESC
-      `);
+    const [healthData, medications, riskScores] = await Promise.all([
+      pool.query(
+        `SELECT * FROM patient_health_data
+         WHERE patient_id = $1
+         ORDER BY recorded_at DESC
+         LIMIT 10`,
+        [patientId]
+      ),
+      pool.query(
+        `SELECT * FROM patient_medications
+         WHERE patient_id = $1
+         ORDER BY next_dose ASC`,
+        [patientId]
+      ),
+      pool.query(
+        `SELECT * FROM patient_risk_scores
+         WHERE patient_id = $1
+         ORDER BY calculated_at DESC
+         LIMIT 5`,
+        [patientId]
+      )
+    ]);
     
     res.json({
       profile: {
-        name: `${patient.FirstName} ${patient.LastName}`,
-        email: patient.Email,
-        dob: patient.DateOfBirth,
-        gender: patient.Gender,
-        phone: patient.PhoneNumber,
-        address: patient.Address,
-        emergencyContact: patient.EmergencyContact,
-        emergencyPhone: patient.EmergencyPhone
+        name: `${patientResult.rows[0].first_name} ${patientResult.rows[0].last_name}`,
+        email: patientResult.rows[0].email,
+        ...patientResult.rows[0]
       },
-      healthData: healthData.recordset,
-      medications: medications.recordset,
-      riskScores: riskScores.recordset
+      healthData: healthData.rows,
+      medications: medications.rows,
+      riskScores: riskScores.rows
     });
   } catch (error) {
     console.error('Error fetching patient details:', error);
@@ -971,30 +923,29 @@ app.get('/api/doctor/appointments', authenticateToken, async (req, res) => {
   if (req.user.role !== 'doctor') return res.sendStatus(403);
   
   try {
-    const doctorId = (await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query('SELECT DoctorID FROM DoctorDetails WHERE UserID = @userId')
-    ).recordset[0].DoctorID;
+    const doctorId = (await pool.query(
+      'SELECT doctor_id FROM doctor_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].doctor_id;
 
-    const result = await dbPool.request()
-      .input('doctorId', sql.Int, doctorId)
-      .query(`
-        SELECT 
-          a.AppointmentID as appointmentId,
-          p.PatientID as patientId,
-          u.FirstName + ' ' + u.LastName as patientName,
-          a.DateTime as dateTime,
-          a.Type as type,
-          a.Status as status,
-          a.Notes as notes
-        FROM PatientAppointments a
-        JOIN PatientDetails p ON a.PatientID = p.PatientID
-        JOIN Users u ON p.UserID = u.UserID
-        WHERE a.DoctorID = @doctorId
-        ORDER BY a.DateTime DESC
-      `);
+    const result = await pool.query(
+      `SELECT 
+        a.appointment_id as "appointmentId",
+        p.patient_id as "patientId",
+        u.first_name || ' ' || u.last_name as "patientName",
+        a.date_time as "dateTime",
+        a.type,
+        a.status,
+        a.notes
+       FROM patient_appointments a
+       JOIN patient_details p ON a.patient_id = p.patient_id
+       JOIN users u ON p.user_id = u.user_id
+       WHERE a.doctor_id = $1
+       ORDER BY a.date_time DESC`,
+      [doctorId]
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching doctor appointments:', error);
     res.status(500).json({ message: 'Failed to fetch appointments' });
@@ -1075,20 +1026,21 @@ app.get('/api/patient/appointments', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    const result = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT a.*, 
-               d.FirstName + ' ' + d.LastName as DoctorName,
-               dd.Specialization as DoctorSpecialization
-        FROM PatientAppointments a
-        JOIN DoctorDetails dd ON a.DoctorID = dd.DoctorID
-        JOIN Users d ON dd.UserID = d.UserID
-        WHERE a.PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY a.DateTime DESC
-      `);
+    const result = await pool.query(
+      `SELECT a.*, 
+              d.first_name || ' ' || d.last_name as "doctorName",
+              dd.specialization as "doctorSpecialization"
+       FROM patient_appointments a
+       JOIN doctor_details dd ON a.doctor_id = dd.doctor_id
+       JOIN users d ON dd.user_id = d.user_id
+       WHERE a.patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY a.date_time DESC`,
+      [req.user.userId]
+    );
     
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching appointments:', error);
     res.status(500).json({ message: 'Failed to fetch appointments' });
@@ -1102,22 +1054,17 @@ app.post('/api/patient/appointments', authenticateToken, async (req, res) => {
   try {
     const { doctorId, dateTime, type, notes } = req.body;
     
-    const result = await dbPool.request()
-      .input('patientId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT PatientID FROM PatientDetails WHERE UserID = @userId')
-        ).recordset[0].PatientID
-      )
-      .input('doctorId', sql.Int, doctorId)
-      .input('dateTime', sql.DateTime, dateTime)
-      .input('type', sql.NVarChar, type)
-      .input('notes', sql.NVarChar, notes || null)
-      .query(`
-        INSERT INTO PatientAppointments 
-        (PatientID, DoctorID, DateTime, Type, Notes, Status)
-        VALUES (@patientId, @doctorId, @dateTime, @type, @notes, 'Scheduled')
-      `);
+    const patientId = (await pool.query(
+      'SELECT patient_id FROM patient_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].patient_id;
+
+    await pool.query(
+      `INSERT INTO patient_appointments 
+       (patient_id, doctor_id, date_time, type, notes, status) 
+       VALUES ($1, $2, $3, $4, $5, 'Scheduled')`,
+      [patientId, doctorId, dateTime, type, notes || null]
+    );
     
     res.status(201).json({ message: 'Appointment created successfully' });
   } catch (error) {
@@ -1188,39 +1135,28 @@ app.post('/api/doctor/prescribe-medication', authenticateToken, async (req, res)
   
   try {
     const { patientId, name, dosage, frequency, notes } = req.body;
-    
-    // Calculate next dose time (default to now + 1 day)
     const nextDose = new Date();
     nextDose.setDate(nextDose.getDate() + 1);
     
-    await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .input('name', sql.NVarChar, name)
-      .input('dosage', sql.NVarChar, dosage)
-      .input('frequency', sql.NVarChar, frequency)
-      .input('nextDose', sql.DateTime, nextDose)
-      .input('notes', sql.NVarChar, notes || null)
-      .query(`
-        INSERT INTO PatientMedications 
-        (PatientID, Name, Dosage, Frequency, NextDose, Notes, Status)
-        VALUES (@patientId, @name, @dosage, @frequency, @nextDose, @notes, 'Pending')
-      `);
+    await pool.query(
+      `INSERT INTO patient_medications 
+       (patient_id, name, dosage, frequency, next_dose, notes, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, 'Pending')`,
+      [patientId, name, dosage, frequency, nextDose, notes || null]
+    );
     
-    // Mark appointment as completed
-    await dbPool.request()
-      .input('patientId', sql.Int, patientId)
-      .input('doctorId', sql.Int, 
-        (await dbPool.request()
-          .input('userId', sql.Int, req.user.userId)
-          .query('SELECT DoctorID FROM DoctorDetails WHERE UserID = @userId')
-        ).recordset[0].DoctorID
-      )
-      .query(`
-        UPDATE PatientAppointments 
-        SET Status = 'Completed' 
-        WHERE PatientID = @patientId AND DoctorID = @doctorId
-        AND Status = 'Scheduled'
-      `);
+    const doctorId = (await pool.query(
+      'SELECT doctor_id FROM doctor_details WHERE user_id = $1',
+      [req.user.userId]
+    )).rows[0].doctor_id;
+
+    await pool.query(
+      `UPDATE patient_appointments 
+       SET status = 'Completed' 
+       WHERE patient_id = $1 AND doctor_id = $2
+       AND status = 'Scheduled'`,
+      [patientId, doctorId]
+    );
     
     res.status(201).json({ message: 'Medication prescribed successfully' });
   } catch (error) {
@@ -1235,25 +1171,21 @@ app.get('/api/patient/ai-predictions', authenticateToken, async (req, res) => {
   if (req.user.role !== 'patient') return res.sendStatus(403);
   
   try {
-    // In a real app, you would call your ML model here
-    // This is a simplified mock response
+    const healthData = await pool.query(
+      `SELECT * FROM patient_health_data 
+       WHERE patient_id = (
+         SELECT patient_id FROM patient_details WHERE user_id = $1
+       )
+       ORDER BY recorded_at DESC
+       LIMIT 30`,
+      [req.user.userId]
+    );
     
-    // Get patient's recent health data
-    const healthData = await dbPool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(`
-        SELECT TOP 30 * FROM PatientHealthData 
-        WHERE PatientID = (SELECT PatientID FROM PatientDetails WHERE UserID = @userId)
-        ORDER BY RecordedAt DESC
-      `);
-    
-    if (healthData.recordset.length === 0) {
+    if (healthData.rows.length === 0) {
       return res.json(null);
     }
     
-    // Mock prediction - in reality you would use a trained model
-    const mockPredictions = generateMockPredictions(healthData.recordset);
-    
+    const mockPredictions = generateMockPredictions(healthData.rows);
     res.json(mockPredictions);
   } catch (error) {
     console.error('AI prediction error:', error);
@@ -1360,7 +1292,6 @@ app.post('/api/patient/ai-assistant', authenticateToken, async (req, res) => {
 
 // Helper functions for mock data generation
 function generateMockPredictions(healthData) {
-  // This would be replaced with actual model predictions
   const predictions = [];
   const metrics = ['bloodPressure', 'heartRate', 'bloodSugar', 'oxygenLevel', 'riskScore'];
   const today = new Date();
@@ -1370,33 +1301,30 @@ function generateMockPredictions(healthData) {
       const date = new Date(today);
       date.setDate(date.getDate() + i);
       
-      // Base value on last actual reading
       let baseValue = 0;
       if (healthData[0]) {
         switch (metric) {
           case 'bloodPressure':
-            baseValue = healthData[0].BloodPressure;
+            baseValue = healthData[0].blood_pressure;
             break;
           case 'heartRate':
-            baseValue = healthData[0].HeartRate;
+            baseValue = healthData[0].heart_rate;
             break;
           case 'bloodSugar':
-            baseValue = healthData[0].BloodSugar;
+            baseValue = healthData[0].blood_sugar;
             break;
           case 'oxygenLevel':
-            baseValue = healthData[0].OxygenLevel;
+            baseValue = healthData[0].oxygen_level;
             break;
           case 'riskScore':
-            baseValue = healthData[0].RiskScore || 50;
+            baseValue = healthData[0].risk_score || 50;
             break;
         }
       }
       
-      // Add some variation
       const variation = (Math.random() * 0.2 - 0.1) * baseValue;
       let value = baseValue + variation;
       
-      // Ensure values stay in reasonable ranges
       if (metric === 'bloodPressure') {
         const [systolic, diastolic] = value.split('/').map(Number);
         value = `${Math.max(80, Math.min(180, systolic))}/${Math.max(50, Math.min(120, diastolic))}`;
@@ -1645,8 +1573,6 @@ app.post('/api/ai/assistant', authenticateToken, async (req, res) => {
 app.post('/api/video/token', authenticateToken, async (req, res) => {
   try {
     const { identity, room } = req.body;
-    
-    // Create access token
     const token = new AccessToken(
       twilioAccountSid,
       twilioApiKey,
@@ -1654,7 +1580,6 @@ app.post('/api/video/token', authenticateToken, async (req, res) => {
       { identity }
     );
 
-    // Grant video access
     const videoGrant = new VideoGrant({ room });
     token.addGrant(videoGrant);
 
@@ -1668,16 +1593,12 @@ app.post('/api/video/token', authenticateToken, async (req, res) => {
 // Start video call (updates appointment status)
 app.post('/api/appointments/:id/start-call', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    // Update appointment status
-    await dbPool.request()
-      .input('appointmentId', sql.Int, id)
-      .query(`
-        UPDATE PatientAppointments 
-        SET Status = 'In Progress' 
-        WHERE AppointmentID = @appointmentId
-      `);
+    await pool.query(
+      `UPDATE patient_appointments 
+       SET status = 'In Progress' 
+       WHERE appointment_id = $1`,
+      [req.params.id]
+    );
     
     res.json({ message: 'Appointment call started' });
   } catch (error) {
