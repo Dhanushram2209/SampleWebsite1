@@ -19,11 +19,6 @@ const Register = () => {
   const onFinish = async (values) => {
     setLoading(true);
     try {
-      // Format date for PostgreSQL
-      if (values.dateOfBirth) {
-        values.dateOfBirth = values.dateOfBirth.format('YYYY-MM-DD');
-      }
-      
       await register(values);
       messageApi.success({
         content: 'Registration successful! Redirecting to login...',
@@ -52,17 +47,6 @@ const Register = () => {
 
   const handleRoleChange = (value) => {
     setRole(value);
-    // Clear role-specific fields when changing roles
-    form.setFieldsValue({
-      specialization: undefined,
-      licenseNumber: undefined,
-      hospitalAffiliation: undefined,
-      dateOfBirth: undefined,
-      gender: undefined,
-      emergencyContact: undefined,
-      emergencyPhone: undefined,
-      address: undefined
-    });
   };
 
   return (
@@ -149,12 +133,8 @@ const Register = () => {
                     message: 'Please input your password!' 
                   },
                   { 
-                    min: 8, 
-                    message: 'Password must be at least 8 characters!' 
-                  },
-                  {
-                    pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
-                    message: 'Password must contain at least one uppercase, one lowercase, one number and one special character!'
+                    min: 6, 
+                    message: 'Password must be at least 6 characters!' 
                   }
                 ]}
                 hasFeedback
@@ -164,7 +144,7 @@ const Register = () => {
             </Col>
             <Col xs={24} sm={12}>
               <Form.Item
-                name="confirmPassword"
+                name="confirm"
                 label="Confirm Password"
                 dependencies={['password']}
                 hasFeedback

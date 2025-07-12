@@ -1,47 +1,22 @@
-import React, { useState, useEffect } from "react";
-import {
-  Layout,
-  Menu,
-  Typography,
-  Card,
-  Row,
-  Col,
-  Table,
-  Statistic,
-  Badge,
-  Tabs,
-  Avatar,
-  List,
-  Tag,
-  Divider,
-  Collapse,
-  Spin,
-  Button,
-  message,
-  Modal,
-  Descriptions,
-  Space,
-} from "antd";
-import {
-  UserOutlined,
-  TeamOutlined,
-  MedicineBoxOutlined,
-  DashboardOutlined,
-  ClockCircleOutlined,
-  CalendarOutlined,
-  BellOutlined,
-  FileTextOutlined,
-  SafetyCertificateOutlined,
-  PhoneOutlined,
-  HomeOutlined,
-  ExclamationCircleOutlined,
-} from "@ant-design/icons";
-import Header from "../../../components/Header";
-import api from "../../../services/api";
-import "./DoctorDashboard.css";
-import moment from "moment";
-import VideoCall from "../../../components/video_call_components/VideoCall";
-import { SyncOutlined } from "@ant-design/icons";
+import React, { useState, useEffect } from 'react';
+import { 
+  Layout, Menu, Typography, Card, Row, Col, Table, Statistic, 
+  Badge, Tabs, Avatar, List, Tag, Divider, Collapse, Spin, Button, message
+} from 'antd';
+import { 
+  UserOutlined, TeamOutlined, MedicineBoxOutlined, DashboardOutlined, 
+  ClockCircleOutlined, CalendarOutlined, BellOutlined, FileTextOutlined,
+  SafetyCertificateOutlined, PhoneOutlined, HomeOutlined, ExclamationCircleOutlined
+} from '@ant-design/icons';
+import Header from '../../../components/Header';
+import { useNavigate } from 'react-router-dom';
+import api from '../../../services/api';
+import './DoctorDashboard.css';
+import moment from 'moment';
+import VideoCall from '../../../components/video_call_components/VideoCall';
+
+import { Modal, Space } from 'antd';
+import { SyncOutlined } from '@ant-design/icons';
 
 const { Header: AntHeader, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -49,38 +24,32 @@ const { TabPane } = Tabs;
 const { Panel } = Collapse;
 
 const DoctorDashboard = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState([]);
   const [stats, setStats] = useState({
     totalPatients: 0,
     criticalPatients: 0,
-    pendingActions: 0,
+    pendingActions: 0
   });
   const [appointments, setAppointments] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const navigate = useNavigate();
   const [videoCallVisible, setVideoCallVisible] = useState(false);
   const [currentAppointment, setCurrentAppointment] = useState(null);
-  const [patientDetailVisible, setPatientDetailVisible] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [patientDetailLoading, setPatientDetailLoading] = useState(false);
-  const [appointmentDetailVisible, setAppointmentDetailVisible] =
-    useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [appointmentDetailLoading, setAppointmentDetailLoading] =
-    useState(false);
+
 
   useEffect(() => {
-    if (activeTab === "profile") {
+    if (activeTab === 'profile') {
       fetchProfileData();
-    } else if (activeTab === "dashboard") {
+    } else if (activeTab === 'dashboard') {
       fetchDashboardData();
-    } else if (activeTab === "patients") {
+    } else if (activeTab === 'patients') {
       fetchPatientsData();
-    } else if (activeTab === "appointments") {
+    } else if (activeTab === 'appointments') {
       fetchAppointments();
-    } else if (activeTab === "alerts") {
+    } else if (activeTab === 'alerts') {
       fetchAlerts();
     }
   }, [activeTab]);
@@ -88,12 +57,12 @@ const DoctorDashboard = () => {
   const fetchProfileData = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/doctor/profile");
+      const response = await api.get('/doctor/profile');
       setProfileData(response.data);
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching profile data:", error);
-      message.error("Failed to fetch profile data");
+      console.error('Error fetching profile data:', error);
+      message.error('Failed to fetch profile data');
       setLoading(false);
     }
   };
@@ -106,8 +75,8 @@ const DoctorDashboard = () => {
       await fetchUnreadAlerts();
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-      message.error("Failed to load dashboard data");
+      console.error('Error fetching dashboard data:', error);
+      message.error('Failed to load dashboard data');
       setLoading(false);
     }
   };
@@ -115,446 +84,278 @@ const DoctorDashboard = () => {
   const fetchPatientsData = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/doctor/patients");
-
+      const response = await api.get('/doctor/patients');
+      
       if (response.data && response.data.patients) {
-        const processedPatients = response.data.patients.map((patient) => ({
+        const processedPatients = response.data.patients.map(patient => ({
           ...patient,
           key: patient.id,
-          lastChecked: patient.lastChecked || "Not available",
-          status: getStatusFromRiskScore(patient.riskScore),
+          lastChecked: patient.lastChecked || 'Not available',
+          status: getStatusFromRiskScore(patient.riskScore)
         }));
-
+        
         setPatients(processedPatients);
-
+        
         // Calculate statistics
         const criticalPatients = processedPatients.filter(
-          (p) => p.status === "Critical"
+          p => p.status === 'Critical'
         ).length;
-
+        
         const pendingActions = processedPatients.reduce(
-          (total, patient) => total + (patient.pendingActions || 0),
-          0
+          (total, patient) => total + (patient.pendingActions || 0), 0
         );
-
+        
         setStats({
           totalPatients: processedPatients.length,
           criticalPatients,
-          pendingActions,
+          pendingActions
         });
       } else {
         setPatients([]);
         setStats({
           totalPatients: 0,
           criticalPatients: 0,
-          pendingActions: 0,
+          pendingActions: 0
         });
       }
     } catch (error) {
-      console.error("Error fetching patients data:", error);
-      message.error("Failed to fetch patients data");
+      console.error('Error fetching patients data:', error);
+      message.error('Failed to fetch patients data');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPatientDetails = async (patientId) => {
-    try {
-      setPatientDetailLoading(true);
-      const response = await api.get(`/doctor/patient/${patientId}`);
-      setSelectedPatient(response.data);
-      setPatientDetailLoading(false);
-    } catch (error) {
-      console.error("Error fetching patient details:", error);
-      message.error("Failed to fetch patient details");
-      setPatientDetailLoading(false);
-    }
-  };
-
-  const handleViewDetails = (patient) => {
-    setSelectedPatient(null);
-    setPatientDetailVisible(true);
-    fetchPatientDetails(patient.id);
-  };
-
-  const handleAppointmentDetails = (appointment) => {
-    setSelectedAppointment(appointment);
-    setAppointmentDetailVisible(true);
-  };
-
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/doctor/appointments");
+      const response = await api.get('/doctor/appointments');
       setAppointments(response.data);
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching appointments:", error);
-      message.error("Failed to fetch appointments");
+      console.error('Error fetching appointments:', error);
+      message.error('Failed to fetch appointments');
       setLoading(false);
     }
   };
 
   const fetchRecentAppointments = async () => {
     try {
-      const response = await api.get("/doctor/appointments?limit=5");
+      const response = await api.get('/doctor/appointments?limit=5');
       setAppointments(response.data);
     } catch (error) {
-      console.error("Error fetching recent appointments:", error);
+      console.error('Error fetching recent appointments:', error);
     }
   };
 
   const fetchAlerts = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/doctor/alerts");
+      const response = await api.get('/doctor/alerts');
       setAlerts(response.data);
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching alerts:", error);
-      message.error("Failed to fetch alerts");
+      console.error('Error fetching alerts:', error);
+      message.error('Failed to fetch alerts');
       setLoading(false);
     }
   };
 
   const fetchUnreadAlerts = async () => {
     try {
-      const response = await api.get("/doctor/alerts?unread=true&limit=5");
+      const response = await api.get('/doctor/alerts?unread=true&limit=5');
       setAlerts(response.data);
     } catch (error) {
-      console.error("Error fetching unread alerts:", error);
+      console.error('Error fetching unread alerts:', error);
     }
   };
 
   const markAlertAsRead = async (alertId) => {
     try {
       await api.post(`/doctor/alerts/${alertId}/read`);
-      setAlerts(alerts.filter((alert) => alert.alertId !== alertId));
-      message.success("Alert marked as read");
+      setAlerts(alerts.filter(alert => alert.alertId !== alertId));
+      message.success('Alert marked as read');
     } catch (error) {
-      console.error("Error marking alert as read:", error);
-      message.error("Failed to mark alert as read");
+      console.error('Error marking alert as read:', error);
+      message.error('Failed to mark alert as read');
     }
   };
 
   const getStatusFromRiskScore = (score) => {
-    if (!score) return "Normal";
-    if (score > 70) return "Critical";
-    if (score > 40) return "Warning";
-    return "Normal";
+    if (!score) return 'Normal';
+    if (score > 70) return 'Critical';
+    if (score > 40) return 'Warning';
+    return 'Normal';
   };
 
   const patientColumns = [
     {
-      title: "Patient",
-      dataIndex: "name",
-      key: "name",
+      title: 'Patient',
+      dataIndex: 'name',
+      key: 'name',
       render: (text, record) => (
         <div>
           <Text strong>{text}</Text>
           <div style={{ fontSize: 12 }}>
-            {record.gender},{" "}
-            {record.dob ? moment(record.dob).format("MMM D, YYYY") : "No DOB"}
+            {record.gender}, {record.dob ? moment(record.dob).format('MMM D, YYYY') : 'No DOB'}
           </div>
         </div>
       ),
     },
     {
-      title: "Contact",
-      dataIndex: "contact",
-      key: "contact",
+      title: 'Contact',
+      dataIndex: 'contact',
+      key: 'contact',
       render: (_, record) => (
         <div>
           <div>{record.email}</div>
-          <div>{record.phone || "No phone"}</div>
+          <div>{record.phone || 'No phone'}</div>
         </div>
       ),
     },
     {
-      title: "Risk Score",
-      dataIndex: "riskScore",
-      key: "riskScore",
+      title: 'Risk Score',
+      dataIndex: 'riskScore',
+      key: 'riskScore',
       render: (score) => (
-        <Tag
-          color={
-            !score
-              ? "default"
-              : score > 70
-              ? "error"
-              : score > 40
-              ? "warning"
-              : "success"
-          }
-        >
-          {score || "N/A"}
+        <Tag color={
+          !score ? 'default' : 
+          score > 70 ? 'error' : 
+          score > 40 ? 'warning' : 'success'
+        }>
+          {score || 'N/A'}
         </Tag>
       ),
     },
     {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
       render: (status) => (
-        <Badge
+        <Badge 
           status={
-            status === "Critical"
-              ? "error"
-              : status === "Warning"
-              ? "warning"
-              : "success"
-          }
+            status === 'Critical' ? 'error' : 
+            status === 'Warning' ? 'warning' : 'success'
+          } 
           text={status}
         />
       ),
     },
     {
-      title: "Actions Needed",
-      dataIndex: "pendingActions",
-      key: "pendingActions",
+      title: 'Actions Needed',
+      dataIndex: 'pendingActions',
+      key: 'pendingActions',
       render: (count) => (
-        <Tag color={count > 0 ? "gold" : "default"}>{count} pending</Tag>
+        <Tag color={count > 0 ? 'gold' : 'default'}>
+          {count} pending
+        </Tag>
       ),
     },
     {
-      title: "Actions",
-      key: "actions",
+      title: 'Actions',
+      key: 'actions',
       render: (_, record) => (
-        <Button type="link" onClick={() => handleViewDetails(record)}>
+        <Button 
+          type="link" 
+          onClick={() => navigate(`/doctor-dashboard/patient/${record.id}`)}
+        >
           View Details
         </Button>
       ),
     },
   ];
 
-  const PatientDetailModal = () => (
-    <Modal
-      title="Patient Details"
-      width={800}
-      visible={patientDetailVisible}
-      onCancel={() => setPatientDetailVisible(false)}
-      footer={[
-        <Button key="back" onClick={() => setPatientDetailVisible(false)}>
-          Close
-        </Button>,
-      ]}
-    >
-      {patientDetailLoading ? (
-        <div style={{ textAlign: "center", padding: "24px" }}>
-          <Spin size="large" />
-        </div>
-      ) : selectedPatient ? (
-        <>
-          <Card title="Profile Information">
-            <Descriptions bordered column={2}>
-              <Descriptions.Item label="Name">
-                {selectedPatient.profile.name}
-              </Descriptions.Item>
-              <Descriptions.Item label="Gender">
-                {selectedPatient.profile.gender || "N/A"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Date of Birth">
-                {selectedPatient.profile.dob
-                  ? new Date(selectedPatient.profile.dob).toLocaleDateString()
-                  : "N/A"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Email">
-                {selectedPatient.profile.email}
-              </Descriptions.Item>
-              <Descriptions.Item label="Phone">
-                {selectedPatient.profile.phone || "N/A"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Address">
-                {selectedPatient.profile.address || "N/A"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Emergency Contact">
-                {selectedPatient.profile.emergencyContact || "N/A"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Emergency Phone">
-                {selectedPatient.profile.emergencyPhone || "N/A"}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-
-          <Divider />
-
-          <Tabs defaultActiveKey="health">
-            <TabPane tab="Health Data" key="health">
-              <Table
-                columns={[
-                  {
-                    title: "Date",
-                    dataIndex: "RecordedAt",
-                    key: "date",
-                    render: (date) => new Date(date).toLocaleString(),
-                  },
-                  {
-                    title: "Blood Pressure",
-                    dataIndex: "BloodPressure",
-                    key: "bp",
-                  },
-                  { title: "Heart Rate", dataIndex: "HeartRate", key: "hr" },
-                  { title: "Blood Sugar", dataIndex: "BloodSugar", key: "bs" },
-                  {
-                    title: "Oxygen Level",
-                    dataIndex: "OxygenLevel",
-                    key: "o2",
-                  },
-                ]}
-                dataSource={selectedPatient.healthData}
-                rowKey="RecordID"
-                pagination={{ pageSize: 5 }}
-              />
-            </TabPane>
-            <TabPane tab="Medications" key="medications">
-              <Table
-                columns={[
-                  { title: "Name", dataIndex: "Name", key: "name" },
-                  { title: "Dosage", dataIndex: "Dosage", key: "dosage" },
-                  {
-                    title: "Frequency",
-                    dataIndex: "Frequency",
-                    key: "frequency",
-                  },
-                  {
-                    title: "Next Dose",
-                    dataIndex: "NextDose",
-                    key: "nextDose",
-                    render: (date) =>
-                      date ? new Date(date).toLocaleString() : "N/A",
-                  },
-                  { title: "Status", dataIndex: "Status", key: "status" },
-                ]}
-                dataSource={selectedPatient.medications}
-                rowKey="MedicationID"
-              />
-            </TabPane>
-            <TabPane tab="Risk History" key="risk">
-              <Table
-                columns={[
-                  {
-                    title: "Date",
-                    dataIndex: "CalculatedAt",
-                    key: "date",
-                    render: (date) => new Date(date).toLocaleString(),
-                  },
-                  {
-                    title: "Risk Score",
-                    dataIndex: "RiskScore",
-                    key: "score",
-                    render: (score) => (
-                      <Tag
-                        color={
-                          score > 70
-                            ? "error"
-                            : score > 40
-                            ? "warning"
-                            : "success"
-                        }
-                      >
-                        {score}
-                      </Tag>
-                    ),
-                  },
-                ]}
-                dataSource={selectedPatient.riskScores}
-                rowKey="ScoreID"
-              />
-            </TabPane>
-          </Tabs>
-        </>
-      ) : (
-        <Text>No patient data available</Text>
-      )}
-    </Modal>
-  );
-
-  const AppointmentDetailModal = () => (
-    <Modal
-      title="Appointment Details"
-      width={700}
-      visible={appointmentDetailVisible}
-      onCancel={() => setAppointmentDetailVisible(false)}
-      footer={[
-        <Button key="back" onClick={() => setAppointmentDetailVisible(false)}>
-          Close
-        </Button>,
-      ]}
-    >
-      {selectedAppointment ? (
-        <Descriptions bordered column={1}>
-          <Descriptions.Item label="Patient">
-            <Text strong>{selectedAppointment.patientName}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="Date & Time">
-            {moment(selectedAppointment.dateTime).format(
-              "MMMM Do YYYY, h:mm a"
-            )}
-          </Descriptions.Item>
-          <Descriptions.Item label="Type">
-            <Tag color="blue">{selectedAppointment.type}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="Status">
-            <Tag
-              color={
-                selectedAppointment.status === "Completed"
-                  ? "green"
-                  : selectedAppointment.status === "Cancelled"
-                  ? "red"
-                  : "blue"
-              }
-            >
-              {selectedAppointment.status}
-            </Tag>
-          </Descriptions.Item>
-          {selectedAppointment.notes && (
-            <Descriptions.Item label="Notes">
-              {selectedAppointment.notes}
-            </Descriptions.Item>
-          )}
-        </Descriptions>
-      ) : (
-        <Spin tip="Loading appointment details..." />
-      )}
-    </Modal>
-  );
+  const appointmentColumns = [
+  {
+    title: 'Patient',
+    dataIndex: 'patientName',
+    key: 'patientName',
+    render: (text) => <Text strong>{text}</Text>,
+  },
+  {
+    title: 'Date & Time',
+    dataIndex: 'dateTime',
+    key: 'dateTime',
+    render: (date) => moment(date).format('MMM D, YYYY h:mm A'),
+    sorter: (a, b) => new Date(a.dateTime) - new Date(b.dateTime)
+  },
+  {
+    title: 'Type',
+    dataIndex: 'type',
+    key: 'type',
+  },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    key: 'status',
+    render: (status) => (
+      <Tag 
+        color={
+          status === 'Completed' ? 'green' : 
+          status === 'Cancelled' ? 'red' : 'blue'
+        }
+      >
+        {status}
+      </Tag>
+    ),
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    render: (_, record) => (
+      <Space>
+        {record.status === 'Scheduled' && (
+          <Button 
+            type="primary" 
+            onClick={() => {
+              setCurrentAppointment(record);
+              setVideoCallVisible(true);
+            }}
+          >
+            Start
+          </Button>
+        )}
+        <Button onClick={() => handleAppointmentAction(record, 'details')}>
+          Details
+        </Button>
+      </Space>
+    ),
+  }
+];
 
   const alertColumns = [
     {
-      title: "Patient",
-      dataIndex: "patientName",
-      key: "patientName",
+      title: 'Patient',
+      dataIndex: 'patientName',
+      key: 'patientName',
       render: (text) => <Text strong>{text}</Text>,
     },
     {
-      title: "Message",
-      dataIndex: "message",
-      key: "message",
+      title: 'Message',
+      dataIndex: 'message',
+      key: 'message',
       render: (text, record) => (
         <div>
-          <ExclamationCircleOutlined
-            style={{
-              color:
-                record.severity === "High"
-                  ? "#ff4d4f"
-                  : record.severity === "Medium"
-                  ? "#faad14"
-                  : "#52c41a",
-              marginRight: 8,
-            }}
+          <ExclamationCircleOutlined 
+            style={{ 
+              color: record.severity === 'High' ? '#ff4d4f' : 
+                     record.severity === 'Medium' ? '#faad14' : '#52c41a',
+              marginRight: 8 
+            }} 
           />
           {text}
         </div>
       ),
     },
     {
-      title: "Time",
-      dataIndex: "timestamp",
-      key: "timestamp",
+      title: 'Time',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
       render: (date) => moment(date).fromNow(),
     },
     {
-      title: "Actions",
-      key: "actions",
+      title: 'Actions',
+      key: 'actions',
       render: (_, record) => (
         <Button type="link" onClick={() => markAlertAsRead(record.alertId)}>
           Mark as Read
@@ -564,54 +365,42 @@ const DoctorDashboard = () => {
   ];
 
   const handleAppointmentAction = async (appointment, action) => {
-    try {
-      if (action === "start") {
-        message.info(`Starting appointment with ${appointment.patientName}`);
-        // You would typically navigate to a telemedicine session here
-        // For now, we'll mark it as completed
-        await api.put(`/appointments/${appointment.appointmentId}/status`, {
-          status: "Completed",
-        });
-        message.success("Appointment marked as completed");
-        fetchAppointments();
-      } else if (action === "cancel") {
-        await api.put(`/appointments/${appointment.appointmentId}/status`, {
-          status: "Cancelled",
-        });
-        message.success("Appointment cancelled");
-        fetchAppointments();
-      } else if (action === "details") {
-        Modal.info({
-          title: "Appointment Details",
-          content: (
-            <div>
-              <p>
-                <strong>Patient:</strong> {appointment.patientName}
-              </p>
-              <p>
-                <strong>Time:</strong>{" "}
-                {moment(appointment.dateTime).format("MMMM Do YYYY, h:mm a")}
-              </p>
-              <p>
-                <strong>Type:</strong> {appointment.type}
-              </p>
-              <p>
-                <strong>Status:</strong> {appointment.status}
-              </p>
-              {appointment.notes && (
-                <p>
-                  <strong>Notes:</strong> {appointment.notes}
-                </p>
-              )}
-            </div>
-          ),
-        });
-      }
-    } catch (error) {
-      console.error("Error handling appointment action:", error);
-      message.error("Failed to perform action");
+  try {
+    if (action === 'start') {
+      message.info(`Starting appointment with ${appointment.patientName}`);
+      // You would typically navigate to a telemedicine session here
+      // For now, we'll mark it as completed
+      await api.put(`/appointments/${appointment.appointmentId}/status`, {
+        status: 'Completed'
+      });
+      message.success('Appointment marked as completed');
+      fetchAppointments();
+    } else if (action === 'cancel') {
+      await api.put(`/appointments/${appointment.appointmentId}/status`, {
+        status: 'Cancelled'
+      });
+      message.success('Appointment cancelled');
+      fetchAppointments();
+    } else if (action === 'details') {
+      Modal.info({
+        title: 'Appointment Details',
+        content: (
+          <div>
+            <p><strong>Patient:</strong> {appointment.patientName}</p>
+            <p><strong>Time:</strong> {moment(appointment.dateTime).format('MMMM Do YYYY, h:mm a')}</p>
+            <p><strong>Type:</strong> {appointment.type}</p>
+            <p><strong>Status:</strong> {appointment.status}</p>
+            {appointment.notes && <p><strong>Notes:</strong> {appointment.notes}</p>}
+          </div>
+        )
+      });
     }
-  };
+  } catch (error) {
+    console.error('Error handling appointment action:', error);
+    message.error('Failed to perform action');
+  }
+};
+
 
   const renderDashboard = () => (
     <>
@@ -624,10 +413,7 @@ const DoctorDashboard = () => {
         </Col>
         <Col xs={24} sm={12} md={8}>
           <Card className="dashboard-card" hoverable>
-            <Statistic
-              title="Critical Patients"
-              value={stats.criticalPatients}
-            />
+            <Statistic title="Critical Patients" value={stats.criticalPatients} />
             <Text type="secondary">Require immediate attention</Text>
           </Card>
         </Col>
@@ -641,48 +427,48 @@ const DoctorDashboard = () => {
 
       <Row gutter={[16, 16]} className="dashboard-sections">
         <Col xs={24} md={12}>
-          <Card
-            title="Recent Alerts"
-            className="dashboard-section-card"
+          <Card 
+            title="Recent Alerts" 
+            className="dashboard-section-card" 
             hoverable
-            extra={<a onClick={() => setActiveTab("alerts")}>View All</a>}
+            extra={<a onClick={() => setActiveTab('alerts')}>View All</a>}
           >
-            <Table
+            <Table 
               columns={alertColumns}
               dataSource={alerts.slice(0, 5)}
-              size="middle"
+              size="middle" 
               pagination={false}
               loading={loading}
             />
           </Card>
         </Col>
         <Col xs={24} md={12}>
-          <Card
-            title="Upcoming Appointments"
-            className="dashboard-section-card"
+          <Card 
+            title="Upcoming Appointments" 
+            className="dashboard-section-card" 
             hoverable
-            extra={<a onClick={() => setActiveTab("appointments")}>View All</a>}
+            extra={<a onClick={() => setActiveTab('appointments')}>View All</a>}
           >
-            <Table
+            <Table 
               columns={appointmentColumns}
               dataSource={appointments.slice(0, 5)}
-              size="middle"
+              size="middle" 
               pagination={false}
               loading={loading}
             />
           </Card>
         </Col>
         <Col xs={24}>
-          <Card
-            title="Patient List"
-            className="dashboard-section-card"
+          <Card 
+            title="Patient List" 
+            className="dashboard-section-card" 
             hoverable
-            extra={<a onClick={() => setActiveTab("patients")}>View All</a>}
+            extra={<a onClick={() => setActiveTab('patients')}>View All</a>}
           >
-            <Table
+            <Table 
               columns={patientColumns}
               dataSource={patients}
-              size="middle"
+              size="middle" 
               pagination={{ pageSize: 5 }}
               loading={loading}
             />
@@ -692,71 +478,16 @@ const DoctorDashboard = () => {
     </>
   );
 
-  const appointmentColumns = [
-    {
-      title: 'Patient',
-      dataIndex: 'patientName',
-      key: 'patientName',
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: 'Date & Time',
-      dataIndex: 'dateTime',
-      key: 'dateTime',
-      render: (date) => moment(date).format('MMM D, YYYY h:mm A'),
-      sorter: (a, b) => new Date(a.dateTime) - new Date(b.dateTime)
-    },
-    {
-      title: 'Type',
-      dataIndex: 'type',
-      key: 'type',
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => (
-        <Tag 
-          color={
-            status === 'Completed' ? 'green' : 
-            status === 'Cancelled' ? 'red' : 'blue'
-          }
-        >
-          {status}
-        </Tag>
-      ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_, record) => (
-        <Space>
-          {record.status === 'Scheduled' && (
-            <Button 
-              type="primary" 
-              onClick={() => {
-                setCurrentAppointment(record);
-                setVideoCallVisible(true);
-              }}
-            >
-              Start
-            </Button>
-          )}
-          <Button onClick={() => handleAppointmentDetails(record)}>
-            Details
-          </Button>
-        </Space>
-      ),
-    }
-  ];
-
-
   const renderPatients = () => (
-    <Card title="Your Patients" className="dashboard-section-card" hoverable>
-      <Table
+    <Card 
+      title="Your Patients" 
+      className="dashboard-section-card" 
+      hoverable
+    >
+      <Table 
         columns={patientColumns}
         dataSource={patients}
-        size="middle"
+        size="middle" 
         pagination={{ pageSize: 10 }}
         loading={loading}
       />
@@ -764,78 +495,82 @@ const DoctorDashboard = () => {
   );
 
   const renderAppointments = () => (
-    <Card
-      title="Appointments"
-      className="dashboard-section-card"
-      hoverable
-      extra={
-        <Button
-          icon={<SyncOutlined />}
-          onClick={fetchAppointments}
+  <Card 
+    title="Appointments" 
+    className="dashboard-section-card" 
+    hoverable
+    extra={
+      <Button 
+        icon={<SyncOutlined />} 
+        onClick={fetchAppointments}
+        loading={loading}
+      >
+        Refresh
+      </Button>
+    }
+  >
+    <Tabs defaultActiveKey="upcoming">
+      <TabPane tab="Upcoming" key="upcoming">
+        <Table 
+          columns={appointmentColumns}
+          dataSource={appointments.filter(a => a.status === 'Scheduled')}
+          size="middle" 
+          pagination={{ pageSize: 10 }}
           loading={loading}
-        >
-          Refresh
-        </Button>
-      }
-    >
-      <Tabs defaultActiveKey="upcoming">
-        <TabPane tab="Upcoming" key="upcoming">
-          <Table
-            columns={appointmentColumns}
-            dataSource={appointments.filter((a) => a.status === "Scheduled")}
-            size="middle"
-            pagination={{ pageSize: 10 }}
-            loading={loading}
-          />
-        </TabPane>
-        <TabPane tab="Completed" key="completed">
-          <Table
-            columns={appointmentColumns}
-            dataSource={appointments.filter((a) => a.status === "Completed")}
-            size="middle"
-            pagination={{ pageSize: 10 }}
-            loading={loading}
-          />
-        </TabPane>
-        <TabPane tab="Cancelled" key="cancelled">
-          <Table
-            columns={appointmentColumns}
-            dataSource={appointments.filter((a) => a.status === "Cancelled")}
-            size="middle"
-            pagination={{ pageSize: 10 }}
-            loading={loading}
-          />
-        </TabPane>
-        <TabPane tab="All" key="all">
-          <Table
-            columns={appointmentColumns}
-            dataSource={appointments}
-            size="middle"
-            pagination={{ pageSize: 10 }}
-            loading={loading}
-          />
-        </TabPane>
-      </Tabs>
-    </Card>
-  );
+        />
+      </TabPane>
+      <TabPane tab="Completed" key="completed">
+        <Table 
+          columns={appointmentColumns}
+          dataSource={appointments.filter(a => a.status === 'Completed')}
+          size="middle" 
+          pagination={{ pageSize: 10 }}
+          loading={loading}
+        />
+      </TabPane>
+      <TabPane tab="Cancelled" key="cancelled">
+        <Table 
+          columns={appointmentColumns}
+          dataSource={appointments.filter(a => a.status === 'Cancelled')}
+          size="middle" 
+          pagination={{ pageSize: 10 }}
+          loading={loading}
+        />
+      </TabPane>
+      <TabPane tab="All" key="all">
+        <Table 
+          columns={appointmentColumns}
+          dataSource={appointments}
+          size="middle" 
+          pagination={{ pageSize: 10 }}
+          loading={loading}
+        />
+      </TabPane>
+    </Tabs>
+  </Card>
+);
 
   const renderAlerts = () => (
-    <Card title="Patient Alerts" className="dashboard-section-card" hoverable>
+    <Card 
+      title="Patient Alerts" 
+      className="dashboard-section-card" 
+      hoverable
+    >
       <Tabs defaultActiveKey="unread">
         <TabPane tab="Unread" key="unread">
-          <Table
+          <Table 
             columns={alertColumns}
-            dataSource={alerts.filter((a) => !a.isRead)}
-            size="middle"
+            dataSource={alerts.filter(a => !a.isRead)}
+            size="middle" 
             pagination={{ pageSize: 10 }}
             loading={loading}
           />
         </TabPane>
         <TabPane tab="All Alerts" key="all">
-          <Table
+          <Table 
             columns={alertColumns}
             dataSource={alerts}
-            size="middle"
+            size="middle" 
             pagination={{ pageSize: 10 }}
             loading={loading}
           />
@@ -847,23 +582,23 @@ const DoctorDashboard = () => {
   const renderProfile = () => (
     <Card title="Your Profile" className="dashboard-section-card" hoverable>
       {loading ? (
-        <div style={{ textAlign: "center", padding: "24px" }}>
+        <div style={{ textAlign: 'center', padding: '24px' }}>
           <Spin />
         </div>
       ) : profileData ? (
         <Row gutter={[16, 16]}>
           <Col xs={24} md={8}>
             <Card>
-              <div style={{ textAlign: "center" }}>
+              <div style={{ textAlign: 'center' }}>
                 <Avatar size={100} icon={<UserOutlined />} />
-                <Title level={4} style={{ marginTop: "16px" }}>
+                <Title level={4} style={{ marginTop: '16px' }}>
                   {profileData.firstName} {profileData.lastName}
                 </Title>
-                <Tag color="blue" style={{ marginBottom: "16px" }}>
+                <Tag color="blue" style={{ marginBottom: '16px' }}>
                   Doctor
                 </Tag>
               </div>
-
+              
               <List size="small">
                 <List.Item>
                   <List.Item.Meta
@@ -874,7 +609,7 @@ const DoctorDashboard = () => {
                 <List.Item>
                   <List.Item.Meta
                     title="Phone"
-                    description={profileData.phoneNumber || "Not provided"}
+                    description={profileData.phoneNumber || 'Not provided'}
                   />
                 </List.Item>
               </List>
@@ -882,7 +617,7 @@ const DoctorDashboard = () => {
           </Col>
           <Col xs={24} md={16}>
             <Card title="Professional Information">
-              <Collapse defaultActiveKey={["1"]}>
+              <Collapse defaultActiveKey={['1']}>
                 <Panel header="Basic Information" key="1">
                   <Row gutter={16}>
                     <Col span={12}>
@@ -890,9 +625,7 @@ const DoctorDashboard = () => {
                         <List.Item.Meta
                           avatar={<SafetyCertificateOutlined />}
                           title="Specialization"
-                          description={
-                            profileData.specialization || "Not specified"
-                          }
+                          description={profileData.specialization || 'Not specified'}
                         />
                       </List.Item>
                     </Col>
@@ -901,9 +634,7 @@ const DoctorDashboard = () => {
                         <List.Item.Meta
                           avatar={<FileTextOutlined />}
                           title="License Number"
-                          description={
-                            profileData.licenseNumber || "Not provided"
-                          }
+                          description={profileData.licenseNumber || 'Not provided'}
                         />
                       </List.Item>
                     </Col>
@@ -916,9 +647,7 @@ const DoctorDashboard = () => {
                         <List.Item.Meta
                           avatar={<PhoneOutlined />}
                           title="Phone Number"
-                          description={
-                            profileData.phoneNumber || "Not provided"
-                          }
+                          description={profileData.phoneNumber || 'Not provided'}
                         />
                       </List.Item>
                     </Col>
@@ -927,9 +656,7 @@ const DoctorDashboard = () => {
                         <List.Item.Meta
                           avatar={<HomeOutlined />}
                           title="Hospital Affiliation"
-                          description={
-                            profileData.hospitalAffiliation || "Not specified"
-                          }
+                          description={profileData.hospitalAffiliation || 'Not specified'}
                         />
                       </List.Item>
                     </Col>
@@ -947,15 +674,15 @@ const DoctorDashboard = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "dashboard":
+      case 'dashboard':
         return renderDashboard();
-      case "patients":
+      case 'patients':
         return renderPatients();
-      case "appointments":
+      case 'appointments':
         return renderAppointments();
-      case "alerts":
+      case 'alerts':
         return renderAlerts();
-      case "profile":
+      case 'profile':
         return renderProfile();
       default:
         return renderDashboard();
@@ -967,7 +694,7 @@ const DoctorDashboard = () => {
       <Sider width={250} className="dashboard-sider">
         <div className="dashboard-logo">
           <Title level={4} className="dashboard-title">
-             Doctor Portal
+            <DashboardOutlined /> Doctor Portal
           </Title>
         </div>
         <Menu
@@ -977,21 +704,11 @@ const DoctorDashboard = () => {
           onClick={({ key }) => setActiveTab(key)}
           className="dashboard-menu"
         >
-          <Menu.Item key="dashboard" icon={<DashboardOutlined />}>
-            Dashboard
-          </Menu.Item>
-          <Menu.Item key="patients" icon={<TeamOutlined />}>
-            Patients
-          </Menu.Item>
-          <Menu.Item key="appointments" icon={<CalendarOutlined />}>
-            Appointments
-          </Menu.Item>
-          <Menu.Item key="alerts" icon={<BellOutlined />}>
-            Alerts
-          </Menu.Item>
-          <Menu.Item key="profile" icon={<UserOutlined />}>
-            Profile
-          </Menu.Item>
+          <Menu.Item key="dashboard" icon={<DashboardOutlined />}>Dashboard</Menu.Item>
+          <Menu.Item key="patients" icon={<TeamOutlined />}>Patients</Menu.Item>
+          <Menu.Item key="appointments" icon={<CalendarOutlined />}>Appointments</Menu.Item>
+          <Menu.Item key="alerts" icon={<BellOutlined />}>Alerts</Menu.Item>
+          <Menu.Item key="profile" icon={<UserOutlined />}>Profile</Menu.Item>
         </Menu>
       </Sider>
       <Layout>
@@ -1001,29 +718,21 @@ const DoctorDashboard = () => {
         <Content className="dashboard-content">
           <div className="dashboard-container">
             <Title level={3} className="dashboard-page-title">
-              {activeTab === "dashboard"
-                ? "Doctor Dashboard"
-                : activeTab === "patients"
-                ? "Patient Management"
-                : activeTab === "appointments"
-                ? "Appointments"
-                : activeTab === "alerts"
-                ? "Patient Alerts"
-                : activeTab === "profile"
-                ? "Your Profile"
-                : ""}
+              {activeTab === 'dashboard' ? 'Doctor Dashboard' : 
+               activeTab === 'patients' ? 'Patient Management' :
+               activeTab === 'appointments' ? 'Appointments' :
+               activeTab === 'alerts' ? 'Patient Alerts' :
+               activeTab === 'profile' ? 'Your Profile' : ''}
             </Title>
             {renderContent()}
-            <PatientDetailModal />
-            <AppointmentDetailModal />
           </div>
         </Content>
         <VideoCall
-          visible={videoCallVisible}
-          onClose={() => setVideoCallVisible(false)}
-          appointment={currentAppointment}
-          userRole="doctor"
-        />
+      visible={videoCallVisible}
+      onClose={() => setVideoCallVisible(false)}
+      appointment={currentAppointment}
+      userRole="doctor"
+    />
       </Layout>
     </Layout>
   );

@@ -11,8 +11,9 @@ const HealthTrendsChart = ({ data }) => {
   const processData = () => {
     return data.map(item => ({
       date: item.RecordedAt,
-      // bloodPressure: item.BloodPressure,
+      bloodPressure: item.BloodPressure,
       systolic: item.BloodPressure ? parseInt(item.BloodPressure.split('/')[0]) : null,
+      diastolic: item.BloodPressure ? parseInt(item.BloodPressure.split('/')[1]) : null,
       heartRate: item.HeartRate,
       bloodSugar: item.BloodSugar,
       oxygenLevel: item.OxygenLevel,
